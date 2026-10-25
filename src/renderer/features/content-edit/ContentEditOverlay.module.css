@@ -182,6 +182,20 @@
   opacity: 0.95;
 }
 
+/* Verschieben: eigene Ebene, die nur verschoben wird (keine Neuberechnung der Seite je Bewegung) */
+.moveLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.moveGhost {
+  position: absolute;
+  opacity: 0.95;
+  user-select: none;
+}
+
 /* Eingabe mit gemischter Gestaltung: wächst mit dem Text, Zeilen wie später auf der Seite */
 .rich {
   min-height: 1.2em;

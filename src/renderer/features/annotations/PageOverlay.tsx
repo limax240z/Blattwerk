@@ -40,7 +40,8 @@ type Gesture =
   | { kind: 'rect'; tool: 'square' | 'circle' | 'freetext' | 'redact'; from: Point; to: Point }
   | { kind: 'line'; tool: 'line' | 'arrow'; from: Point; to: Point }
   | { kind: 'ink'; points: Point[] }
-  | { kind: 'move'; id: string; origin: Point; dx: number; dy: number }
+  // client: Zeigerlage beim Anfassen; während des Ziehens wird der Kommentar nur verschoben, nicht neu gezeichnet
+  | { kind: 'move'; id: string; origin: Point; dx: number; dy: number; client: { x: number; y: number } }
   | { kind: 'resize'; id: string; fixed: Point; to: Point }
   | { kind: 'endpoint'; id: string; which: 'start' | 'end'; to: Point }
   // Anfang oder Ende einer Textmarkierung ziehen: das andere Ende bleibt fest, die Markierung folgt dem Text
@@ -139,9 +140,37 @@ export function PageOverlay({
   const drawing = !readOnly && DRAWING_TOOLS.has(tool);
   const markupTool = ['highlight', 'underline', 'strikeout', 'squiggly', 'redactText'].includes(tool);
 
+  const frame = useRef(0);
+  const pointer = useRef({ x: 0, y: 0 });
   const setGesture = (next: Gesture | null) => {
+    // Die Verschiebung aus dem Ziehen gehört nicht React: vor dem nächsten Zeichnen wieder entfernen
+    if (gestureRef.current?.kind === 'move') for (const group of svgRef.current?.querySelectorAll('[data-move-id]') ?? []) group.removeAttribute('transform');
     gestureRef.current = next;
+    if (frame.current) cancelAnimationFrame(frame.current);
+    frame.current = 0;
     setGestureState(next);
+  };
+
+  // Während des Ziehens höchstens einmal je Bild neu zeichnen; Verschieben setzt nur eine Verschiebung an den
+  // Gruppen des Kommentars (data-move-id), ohne die Ebene neu zu zeichnen (unter Windows spürbar schneller)
+  const scheduleGesture = (next: Gesture) => {
+    gestureRef.current = next;
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      const current = gestureRef.current;
+      if (!current) return;
+      if (current.kind !== 'move') {
+        setGestureState(current);
+        return;
+      }
+      const svg = svgRef.current;
+      const box = svg?.getBoundingClientRect();
+      if (!svg || !box || box.width === 0) return;
+      const vx = ((pointer.current.x - current.client.x) / box.width) * geometry.width;
+      const vy = ((pointer.current.y - current.client.y) / box.height) * geometry.height;
+      for (const group of svg.querySelectorAll(`[data-move-id="${CSS.escape(current.id)}"]`)) group.setAttribute('transform', `translate(${vx} ${vy})`);
+    });
   };
 
   // Position des Zeigers in PDF-Punkten
@@ -218,7 +247,8 @@ export function PageOverlay({
     if (editingId && editingId !== a.id) store().setEditing(tabId, null);
     if (readOnly || !isMovable(a) || editingId === a.id) return;
     capture(event);
-    setGesture({ kind: 'move', id: a.id, origin: toPdf(event), dx: 0, dy: 0 });
+    pointer.current = { x: event.clientX, y: event.clientY };
+    setGesture({ kind: 'move', id: a.id, origin: toPdf(event), dx: 0, dy: 0, client: { x: event.clientX, y: event.clientY } });
   };
 
   const onHandlePointerDown = (event: ReactPointerEvent, a: Annotation, corner: number) => {
@@ -298,23 +328,24 @@ export function PageOverlay({
     const current = gestureRef.current;
     if (!current) return;
     const at = toPdf(event);
+    pointer.current = { x: event.clientX, y: event.clientY };
     switch (current.kind) {
       case 'ink': {
         const coalesced = event.nativeEvent.getCoalescedEvents?.() ?? [];
         const added = coalesced.length > 0 ? coalesced.map((e) => toPdf(e)) : [at];
-        setGesture({ ...current, points: [...current.points, ...added] });
+        scheduleGesture({ ...current, points: [...current.points, ...added] });
         return;
       }
       case 'line':
       case 'rect':
-        setGesture({ ...current, to: at });
+        scheduleGesture({ ...current, to: at });
         return;
       case 'move':
-        setGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
+        scheduleGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
         return;
       case 'resize':
       case 'endpoint':
-        setGesture({ ...current, to: at });
+        scheduleGesture({ ...current, to: at });
         return;
       case 'markup':
         // Läuft über die Fenster-Ereignisse (onMarkupHandleDown)
@@ -427,10 +458,11 @@ export function PageOverlay({
         const fromFile = original.ref ? originals[original.id] : undefined;
         // Unveränderte vorhandene Kommentare zeichnet pdf.js selbst; hier nur die Klickfläche.
         // Schwärzungsmarkierungen haben keine Darstellung in der Datei; pdf.js zeichnet sie nicht.
-        const drawn = !fromFile || needsAppearance(fromFile, original) || a !== original || a.kind === 'redact';
+        const moving = gesture?.kind === 'move' && gesture.id === a.id;
+        const drawn = !fromFile || needsAppearance(fromFile, original) || a !== original || a.kind === 'redact' || moving;
         const editing = editingId === a.id && a.kind === 'freetext';
         return (
-          <g key={a.id}>
+          <g key={a.id} data-move-id={moving ? a.id : undefined}>
             {drawn && !editing && <AnnotationShape annotation={a} geometry={geometry} />}
             {!editing && (
               <HitArea
@@ -452,8 +484,8 @@ export function PageOverlay({
         .map((original) => {
           const a = preview(original, gesture);
           return (
+            <g key={`selection-${a.id}`} data-move-id={gesture?.kind === 'move' && gesture.id === a.id ? a.id : undefined}>
             <SelectionFrame
-              key={`selection-${a.id}`}
               annotation={a}
               geometry={geometry}
               handleSize={handleSize}
@@ -462,6 +494,7 @@ export function PageOverlay({
               onEndpointDown={(event, which) => onEndpointPointerDown(event, original, which)}
               onMarkupDown={(event, which) => isTextMarkup(original) && onMarkupHandleDown(event, original, which)}
             />
+            </g>
           );
         })}
       {draft}

@@ -12,7 +12,8 @@ import styles from './FormEditOverlay.module.css';
 
 type Gesture =
   | { kind: 'create'; tool: FieldKind; from: Point; to: Point }
-  | { kind: 'move'; widget: FieldWidget; origin: Point; dx: number; dy: number }
+  // client: Zeigerlage beim Anfassen; beim Ziehen wird das Feld nur verschoben, nicht neu gezeichnet
+  | { kind: 'move'; widget: FieldWidget; origin: Point; dx: number; dy: number; client: { x: number; y: number } }
   | { kind: 'resize'; widget: FieldWidget; fixed: Point; to: Point };
 
 // Bildschirmpixel → Einheiten des SVG (PDF-Punkte); pdf.js rechnet 1 Punkt = 96/72 Pixel bei 100 %.
@@ -55,9 +56,36 @@ export function FormEditOverlay({ tabId, pageIndex, geometry, scale }: FormEditO
   const pendingRect = useFormEdit((s) => s.pendingRect[tabId] ?? null);
   const pdf = getRuntime(tabId)?.pdf ?? null;
 
+  const frame = useRef(0);
+  const pointer = useRef({ x: 0, y: 0 });
   const setGesture = (next: Gesture | null) => {
+    // Die Verschiebung aus dem Ziehen gehört nicht React: vor dem nächsten Zeichnen wieder entfernen
+    if (gestureRef.current?.kind === 'move') for (const group of svgRef.current?.querySelectorAll('[data-move-ref]') ?? []) group.removeAttribute('transform');
     gestureRef.current = next;
+    if (frame.current) cancelAnimationFrame(frame.current);
+    frame.current = 0;
     setGestureState(next);
+  };
+
+  // Höchstens einmal je Bild neu zeichnen; Verschieben setzt nur eine Verschiebung an Feld und Anfassern
+  const scheduleGesture = (next: Gesture) => {
+    gestureRef.current = next;
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      const current = gestureRef.current;
+      if (!current) return;
+      if (current.kind !== 'move') {
+        setGestureState(current);
+        return;
+      }
+      const svg = svgRef.current;
+      const box = svg?.getBoundingClientRect();
+      if (!svg || !box || box.width === 0) return;
+      const vx = ((pointer.current.x - current.client.x) / box.width) * geometry.width;
+      const vy = ((pointer.current.y - current.client.y) / box.height) * geometry.height;
+      for (const group of svg.querySelectorAll(`[data-move-ref="${CSS.escape(current.widget.ref)}"]`)) group.setAttribute('transform', `translate(${vx} ${vy})`);
+    });
   };
 
   // Felder der Seite laden; nach dem Neuladen die Auswahl auf den frischen Stand setzen.
@@ -115,7 +143,8 @@ export function FormEditOverlay({ tabId, pageIndex, geometry, scale }: FormEditO
     event.stopPropagation();
     useFormEdit.getState().select(tabId, widget);
     capture(event);
-    setGesture({ kind: 'move', widget, origin: toPdf(event), dx: 0, dy: 0 });
+    pointer.current = { x: event.clientX, y: event.clientY };
+    setGesture({ kind: 'move', widget, origin: toPdf(event), dx: 0, dy: 0, client: { x: event.clientX, y: event.clientY } });
   };
 
   const onHandlePointerDown = (event: ReactPointerEvent, widget: FieldWidget, corner: number) => {
@@ -132,9 +161,10 @@ export function FormEditOverlay({ tabId, pageIndex, geometry, scale }: FormEditO
     const current = gestureRef.current;
     if (!current) return;
     const at = toPdf(event);
-    if (current.kind === 'create') setGesture({ ...current, to: at });
-    else if (current.kind === 'move') setGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
-    else setGesture({ ...current, to: at });
+    pointer.current = { x: event.clientX, y: event.clientY };
+    if (current.kind === 'create') scheduleGesture({ ...current, to: at });
+    else if (current.kind === 'move') scheduleGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
+    else scheduleGesture({ ...current, to: at });
   };
 
   const finish = () => {
@@ -180,8 +210,9 @@ export function FormEditOverlay({ tabId, pageIndex, geometry, scale }: FormEditO
         const r = geometry.rectToView(pending ?? previewRect(widget, gesture));
         const isSelected = selected?.ref === widget.ref;
         const showLabel = r.w > labelSize * 4 && r.h > labelSize * 1.2;
+        const moving = gesture?.kind === 'move' && gesture.widget.ref === widget.ref;
         return (
-          <g key={widget.ref}>
+          <g key={widget.ref} data-move-ref={moving ? widget.ref : undefined}>
             <rect
               className={[styles.field, isSelected ? styles.selected : '', creating ? styles.passive : ''].join(' ')}
               x={r.x}
@@ -209,7 +240,7 @@ export function FormEditOverlay({ tabId, pageIndex, geometry, scale }: FormEditO
         .map((widget) => {
           const rect = pendingRect?.ref === widget.ref ? pendingRect.rect : previewRect(widget, gesture);
           return (
-            <g key={`handles-${widget.ref}`} data-testid="form-field-selection">
+            <g key={`handles-${widget.ref}`} data-testid="form-field-selection" data-move-ref={gesture?.kind === 'move' && gesture.widget.ref === widget.ref ? widget.ref : undefined}>
               {corners(rect).map((p, i) => {
                 const [x, y] = geometry.toView(p);
                 return (
