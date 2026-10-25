@@ -17,7 +17,8 @@ import { pageObjects } from './page-objects';
 
 type Gesture =
   // Verschieben: object ist die angefasste Einheit, group alle, die mitwandern (Mehrfachauswahl)
-  | { kind: 'move'; object: EditUnit; group: EditUnit[]; origin: Point; dx: number; dy: number }
+  // client: Zeigerlage beim Anfassen (Fenster); die Vorschau folgt dem Zeiger ohne Neuzeichnen (moveLayer)
+  | { kind: 'move'; object: EditUnit; group: EditUnit[]; origin: Point; dx: number; dy: number; client: { x: number; y: number } }
   // Auswahlrechteck auf freier Fläche (Ansichtskoordinaten); additive: Umschalt/Cmd ergänzt die Auswahl
   | { kind: 'marquee'; start: Point; to: Point; additive: boolean }
   | { kind: 'scale'; object: EditUnit; fixed: Point; to: Point }
@@ -204,9 +205,33 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   // Zum Anklicken: Text über Bildern und Grafiken, innerhalb einer Art die kleineren oben
   const stacked = useMemo(() => [...objects].sort((a, b) => Number(a.kind === 'text') - Number(b.kind === 'text') || area(b.bounds) - area(a.bounds)), [objects]);
 
+  const frame = useRef(0);
+  const moveLayer = useRef<HTMLDivElement>(null);
+  const pointer = useRef({ x: 0, y: 0 });
   const setGesture = (next: Gesture | null) => {
     gestureRef.current = next;
+    if (frame.current) cancelAnimationFrame(frame.current);
+    frame.current = 0;
     setGestureState(next);
+  };
+
+  // Während des Ziehens höchstens einmal je Bild neu zeichnen (Rahmen, Größe, Breite). Verschieben zeichnet gar nicht
+  // neu: Die Vorschau liegt in einer eigenen Ebene und wird nur verschoben (das übernimmt die Grafikkarte; unter
+  // Windows hing sie sonst spürbar hinterher, weil jede Bewegung die ganze Ebene der Seite neu zeichnete).
+  const scheduleGesture = (next: Gesture) => {
+    gestureRef.current = next;
+    if (frame.current) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = 0;
+      const current = gestureRef.current;
+      if (!current) return;
+      if (current.kind === 'move') {
+        const layer = moveLayer.current;
+        if (layer) layer.style.transform = `translate(${pointer.current.x - current.client.x}px, ${pointer.current.y - current.client.y}px)`;
+      } else {
+        setGestureState(current);
+      }
+    });
   };
 
   const toPdf = (event: { clientX: number; clientY: number }): Point => {
@@ -263,7 +288,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     if (group.length === 1) selectUnits([object]);
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
     setGhosts(snapshot(pageCanvas(), geometry, group));
-    setGesture({ kind: 'move', object, group, origin: toPdf(event), dx: 0, dy: 0 });
+    setGesture({ kind: 'move', object, group, origin: toPdf(event), dx: 0, dy: 0, client: { x: event.clientX, y: event.clientY } });
   };
 
   // Ausgewählte Einheiten dieser Seite, aus der aktuellen Liste (Lage und Text immer aktuell)
@@ -335,13 +360,14 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
   const onPointerMove = (event: ReactPointerEvent) => {
     const current = gestureRef.current;
     if (!current) return;
+    pointer.current = { x: event.clientX, y: event.clientY };
     if (current.kind === 'marquee') {
-      setGesture({ ...current, to: toView(event) });
+      scheduleGesture({ ...current, to: toView(event) });
       return;
     }
     const at = toPdf(event);
-    if (current.kind === 'move') setGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
-    else setGesture({ ...current, to: at });
+    if (current.kind === 'move') scheduleGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
+    else scheduleGesture({ ...current, to: at });
   };
 
   const finish = () => {
@@ -437,7 +463,18 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
         data-content-edit-overlay=""
         data-page-index={pageIndex}
       >
-        {ghosts && (gesture?.kind === 'move' || gesture?.kind === 'scale' || pending?.pageIndex === pageIndex) && (
+        {ghosts && gesture?.kind === 'move' && (
+          // Beim Verschieben: die alte Stelle abdecken; das Abbild selbst wandert in der eigenen Ebene (unten)
+          <g className={styles.ghosts}>
+            {[...ghosts].map(([index, ghost]) => {
+              const unit = objects.find((object) => object.index === index);
+              if (!unit) return null;
+              const from = geometry.rectToView(unit.bounds);
+              return <rect key={index} x={from.x - GHOST_PAD} y={from.y - GHOST_PAD} width={from.w + 2 * GHOST_PAD} height={from.h + 2 * GHOST_PAD} fill={ghost.background} />;
+            })}
+          </g>
+        )}
+        {ghosts && (gesture?.kind === 'scale' || (!gesture && pending?.pageIndex === pageIndex)) && (
           <g className={styles.ghosts} data-testid="content-ghosts">
             {[...ghosts].map(([index, ghost]) => {
               const unit = objects.find((object) => object.index === index);
@@ -496,7 +533,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
           );
         })}
         {objects
-          .filter((object) => selected?.pageIndex === pageIndex && !selected.group && selected.index === object.index && tool === 'select' && !editing)
+          .filter((object) => selected?.pageIndex === pageIndex && !selected.group && selected.index === object.index && tool === 'select' && !editing && gesture?.kind !== 'move')
           // eslint-disable-next-line react-hooks/refs -- Refs werden nur in den Zeiger-Handlern gelesen, nicht beim Zeichnen
           .map((object) => {
             const bounds = (pending?.pageIndex === pageIndex ? pending.bounds[object.index] : undefined) ?? previewBounds(object, gesture);
@@ -550,6 +587,32 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
           />
         )}
       </svg>
+      {ghosts && gesture?.kind === 'move' && (
+        <div ref={moveLayer} className={styles.moveLayer} data-testid="content-move-layer">
+          {[...ghosts].map(([index, ghost]) => {
+            const unit = objects.find((object) => object.index === index);
+            if (!unit) return null;
+            const from = geometry.rectToView(unit.bounds);
+            const percent = (value: number, total: number) => `${(value / total) * 100}%`;
+            return (
+              <img
+                key={index}
+                src={ghost.href}
+                alt=""
+                draggable={false}
+                className={styles.moveGhost}
+                style={{
+                  left: percent(from.x - GHOST_PAD, geometry.width),
+                  top: percent(from.y - GHOST_PAD, geometry.height),
+                  width: percent(from.w + 2 * GHOST_PAD, geometry.width),
+                  height: percent(from.h + 2 * GHOST_PAD, geometry.height),
+                }}
+                data-testid="content-ghost"
+              />
+            );
+          })}
+        </div>
+      )}
       {(() => {
         // Live-Vorschau beim Ziehen der Breite: der Text bricht sofort in der neuen Breite um
         const live =

@@ -754,7 +754,7 @@ test.describe('Verschieben mit Live-Vorschau', () => {
     const moved = await ghost.boundingBox();
     expect((moved?.x ?? 0) - before.x).toBeGreaterThan(90);
     expect((moved?.y ?? 0) - before.y).toBeGreaterThan(30);
-    expect(await ghost.getAttribute('href')).toMatch(/^data:image\/png;base64,/);
+    expect(await ghost.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
     if (process.env.BLATTWERK_SHOT) await page.screenshot({ path: path.resolve('.tools/shots/verschieben-live.png') });
     await page.mouse.up();
     // Nach dem Loslassen steht die Zeile dort, wo das Abbild war
