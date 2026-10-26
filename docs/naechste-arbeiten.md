@@ -30,6 +30,21 @@ Stand: 2026-10-24. Reihenfolge = Vorrang. Erledigte Punkte hier streichen und im
 - **Wasserzeichen, Kopf-/Fußzeilen:** Schriften des Rechners für alle Schriftsysteme.
 - **Werkzeuge:** „Dokument bereinigen“ (Metadaten, Anhänge, Skripte, Lesezeichen).
 
+## Nächster Punkt (erst umsetzen, wenn der Auftraggeber sagt, dass GitHub wieder geht)
+
+**Fehler: Home-Knopf überlagert das Dokument** (gemeldet 2026-10-26). Der Home-Knopf am Anfang der Tableiste zeigt die
+Startseite, aber das bisher Angezeigte verschwindet nicht: Startseite und Dokument liegen sichtbar übereinander.
+
+- **Wo:** `app/StartScreen.tsx` als Überlagerung (`ui.homeOpen`, Befehl `app.home`), Home-Knopf in `TabBar.tsx`,
+  Gestaltung ADR 0028. Vermutung (noch nicht geprüft): Die Überlagerung ist durchsichtig (Glas, unter macOS 26 echtes
+  `NSGlassEffectView` mit durchsichtigem Fenster, ADR 0023) und deckt das Dokument dahinter nicht ab, oder die
+  Glasflächen des Dokuments bleiben stehen.
+- **Ziel:** Mit offenem Home-Knopf ist nur die Startseite zu sehen (Dokument ganz verdeckt oder ausgeblendet); Esc und
+  „Zurück“ zeigen das Dokument wieder wie vorher. Unter macOS mit und ohne Liquid Glass und unter Windows prüfen.
+- **Test:** Oberflächentest in `start.spec.ts` (Home-Knopf mit offenem Dokument: Dokument nicht sichtbar bzw. verdeckt;
+  Bildschirmfoto ansehen), dazu Rückweg.
+- **Ablauf:** Pull Request, CI abwarten, Handy-Nachricht, Version erhöhen.
+
 ## Offen
 
 - **Windows:** von Hand ausprobieren (Auftraggeber), gefundene Fehler hier eintragen.
