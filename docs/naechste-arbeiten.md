@@ -39,6 +39,12 @@ Startseite, aber das bisher Angezeigte verschwindet nicht: Startseite und Dokume
   Gestaltung ADR 0028. Vermutung (noch nicht geprüft): Die Überlagerung ist durchsichtig (Glas, unter macOS 26 echtes
   `NSGlassEffectView` mit durchsichtigem Fenster, ADR 0023) und deckt das Dokument dahinter nicht ab, oder die
   Glasflächen des Dokuments bleiben stehen.
+- **Bildschirmfoto des Auftraggebers (2026-10-26):** nur unter macOS, unter Windows nicht. Durch die Startseite scheinen
+  das Dokument **und sogar andere Programme hinter dem Fenster** (Word, Schreibtisch). Damit ist die Ursache fast sicher
+  das native Glas (ADR 0023): Für die Startseite wird das Fenster durchsichtig gemacht (`windowOpaque: false`, ein
+  Glas über das ganze Fenster); mit offenem Dokument darunter darf das nicht passieren. Prüfen in
+  `src/renderer/app/native-glass.ts` (Glasflächen je Zustand, `ui.homeOpen`) und `src/main/native-glass.ts`; die
+  Überlagerung braucht einen deckenden Hintergrund oder das Fenster bleibt undurchsichtig.
 - **Ziel:** Mit offenem Home-Knopf ist nur die Startseite zu sehen (Dokument ganz verdeckt oder ausgeblendet); Esc und
   „Zurück“ zeigen das Dokument wieder wie vorher. Unter macOS mit und ohne Liquid Glass und unter Windows prüfen.
 - **Test:** Oberflächentest in `start.spec.ts` (Home-Knopf mit offenem Dokument: Dokument nicht sichtbar bzw. verdeckt;
