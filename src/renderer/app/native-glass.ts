@@ -2,6 +2,7 @@
 // Die Oberfläche ist dort durchsichtig (CSS unter [data-native-glass='on']), überall sonst deckend.
 //   Startseite: das ganze Fenster
 //   Dokument: das Band oben (Werkzeugleiste, Tabs, Modusleiste) und die schwebenden Seitenleisten
+//   Startseite über offenen Dokumenten (Home-Knopf): nur das Band; die Startseite selbst ist dann deckend
 import { useEffect } from 'react';
 import type { GlassRegion } from '../../shared/ipc';
 import { api } from '../api';
@@ -24,13 +25,15 @@ function measure(): GlassRegion[] {
   const height = window.innerHeight;
   const band = cssColor('--color-bg');
   const surface = cssColor('--color-surface');
-  if (document.querySelector('[data-testid="start-screen"]')) {
+  const start = document.querySelector('[data-testid="start-screen"]');
+  if (start && !start.hasAttribute('data-overlay')) {
     return [{ x: 0, y: 0, width, height, radius: 0, tint: [...band, TINT_BAND], style: 'regular', anchor: 'fill' }];
   }
   const regions: GlassRegion[] = [];
   const workspace = document.querySelector('[data-glass-workspace]');
   const top = workspace ? workspace.getBoundingClientRect().top : 0;
   regions.push({ x: 0, y: 0, width, height: top, radius: 0, tint: [...band, TINT_BAND], style: 'regular', anchor: 'band' });
+  if (start) return regions;
   for (const [selector, anchor] of [
     ['[data-testid="left-sidebar"]', 'left'],
     ['[data-testid="right-panel"]', 'right'],

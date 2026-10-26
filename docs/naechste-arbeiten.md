@@ -30,7 +30,7 @@ Stand: 2026-10-24. Reihenfolge = Vorrang. Erledigte Punkte hier streichen und im
 - **Wasserzeichen, Kopf-/Fußzeilen:** Schriften des Rechners für alle Schriftsysteme.
 - **Werkzeuge:** „Dokument bereinigen“ (Metadaten, Anhänge, Skripte, Lesezeichen).
 
-## Nächster Punkt (erst umsetzen, wenn der Auftraggeber sagt, dass GitHub wieder geht)
+## Behoben in 0.16.2, lokal (Zweig `home-knopf`; hochladen erst nach Go des Auftraggebers, GitHub-Sperre)
 
 **Fehler: Home-Knopf überlagert das Dokument** (gemeldet 2026-10-26). Der Home-Knopf am Anfang der Tableiste zeigt die
 Startseite, aber das bisher Angezeigte verschwindet nicht: Startseite und Dokument liegen sichtbar übereinander.
@@ -49,7 +49,9 @@ Startseite, aber das bisher Angezeigte verschwindet nicht: Startseite und Dokume
   „Zurück“ zeigen das Dokument wieder wie vorher. Unter macOS mit und ohne Liquid Glass und unter Windows prüfen.
 - **Test:** Oberflächentest in `start.spec.ts` (Home-Knopf mit offenem Dokument: Dokument nicht sichtbar bzw. verdeckt;
   Bildschirmfoto ansehen), dazu Rückweg.
-- **Ablauf:** Pull Request, CI abwarten, Handy-Nachricht, Version erhöhen.
+- **Behoben:** Die Startseite über Dokumenten (`data-overlay`) bleibt mit nativem Glas deckend; Glas meldet die
+  Oberfläche dann nur für das Band (`native-glass.ts`). Test „Home-Knopf über einem Dokument“ in `regressions.spec.ts`.
+- **Noch offen:** Pull Request, CI abwarten, Handy-Nachricht – erst nach dem Go.
 
 ## Offen
 
