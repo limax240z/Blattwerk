@@ -208,7 +208,7 @@ export function StartScreen({ overlay = false }: { overlay?: boolean }) {
   const nothing = query.trim() !== '' && !showBlank && shownTemplates.length === 0 && shownRecent.length === 0;
 
   return (
-    <div className={[styles.screen, overlay ? styles.overlay : ''].join(' ')} data-testid="start-screen">
+    <div className={[styles.screen, overlay ? styles.overlay : ''].join(' ')} data-testid="start-screen" data-overlay={overlay || undefined}>
       <div className={styles.inner}>
         <header className={styles.masthead}>
           <img className={styles.mark} src={appIcon} alt="" aria-hidden="true" />

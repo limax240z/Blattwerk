@@ -318,6 +318,27 @@ test.describe('Liquid Glass von macOS', () => {
     await expect.poll(async () => (await docRegions()).length).toBe(1);
     await doc.close();
   });
+
+  test('Home-Knopf über einem Dokument: Startseite deckt ab, Glas nur im Band', async () => {
+    test.skip(process.platform !== 'darwin', 'nur macOS');
+    const { page, app, close } = await launchApp([fixture('text.pdf')]);
+    const native = await page.evaluate(() => (window as unknown as { blattwerk: { getAppInfo(): Promise<{ nativeGlass: boolean }> } }).blattwerk.getAppInfo());
+    test.skip(!native.nativeGlass, 'macOS ohne Liquid Glass');
+    await waitForDocument(page, TEXT_PDF.pages);
+    const regions = () => app.evaluate(() => (globalThis as unknown as { __blattwerkGlass: () => Array<{ x: number; y: number; width: number; height: number; windowOpaque: boolean }> }).__blattwerkGlass());
+    await menuClick(app, 'app.home');
+    const start = page.getByTestId('start-screen');
+    await expect(start).toBeVisible();
+    // Fehlerbericht: Dokument und Schreibtisch schienen durch die Startseite
+    expect(await start.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    const workspaceTop = await page.locator('[data-glass-workspace]').evaluate((el) => el.getBoundingClientRect().top);
+    await expect.poll(async () => (await regions()).map((r) => Math.round(r.height))).toEqual([Math.round(workspaceTop)]);
+    // Zurück zum Dokument: wieder Band und Seitenleiste
+    await page.keyboard.press('Escape');
+    await expect(start).toHaveCount(0);
+    await expect.poll(async () => (await regions()).length).toBe(2);
+    await close();
+  });
 });
 
 test('schmales Fenster: was nicht in die Leiste passt, steht im Menü „Weitere Werkzeuge“', async () => {

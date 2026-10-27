@@ -30,6 +30,35 @@ Stand: 2026-10-24. Reihenfolge = Vorrang. Erledigte Punkte hier streichen und im
 - **Wasserzeichen, Kopf-/Fußzeilen:** Schriften des Rechners für alle Schriftsysteme.
 - **Werkzeuge:** „Dokument bereinigen“ (Metadaten, Anhänge, Skripte, Lesezeichen).
 
+## Umzug auf das GitHub-Konto `limax240z` (0.16.2)
+
+Das Konto `MythicLimax` wurde am 2026-10-26 gesperrt. Ab 0.16.2 liegen Quelltext und Downloads beim neuen Konto
+`limax240z` (`UPDATE_REPOSITORY`, CI-Job „Veröffentlichen“). Installationen bis 0.16.1 fragen noch beim alten Konto
+und brauchen 0.16.2 einmal von Hand (Mac: .dmg, Windows: Setup.exe).
+
+## Behoben in 0.16.2 (Zweig `home-knopf`)
+
+**Fehler: Home-Knopf überlagert das Dokument** (gemeldet 2026-10-26). Der Home-Knopf am Anfang der Tableiste zeigt die
+Startseite, aber das bisher Angezeigte verschwindet nicht: Startseite und Dokument liegen sichtbar übereinander.
+
+- **Wo:** `app/StartScreen.tsx` als Überlagerung (`ui.homeOpen`, Befehl `app.home`), Home-Knopf in `TabBar.tsx`,
+  Gestaltung ADR 0028. Vermutung (noch nicht geprüft): Die Überlagerung ist durchsichtig (Glas, unter macOS 26 echtes
+  `NSGlassEffectView` mit durchsichtigem Fenster, ADR 0023) und deckt das Dokument dahinter nicht ab, oder die
+  Glasflächen des Dokuments bleiben stehen.
+- **Bildschirmfoto des Auftraggebers (2026-10-26):** nur unter macOS, unter Windows nicht. Durch die Startseite scheinen
+  das Dokument **und sogar andere Programme hinter dem Fenster** (Word, Schreibtisch). Damit ist die Ursache fast sicher
+  das native Glas (ADR 0023): Für die Startseite wird das Fenster durchsichtig gemacht (`windowOpaque: false`, ein
+  Glas über das ganze Fenster); mit offenem Dokument darunter darf das nicht passieren. Prüfen in
+  `src/renderer/app/native-glass.ts` (Glasflächen je Zustand, `ui.homeOpen`) und `src/main/native-glass.ts`; die
+  Überlagerung braucht einen deckenden Hintergrund oder das Fenster bleibt undurchsichtig.
+- **Ziel:** Mit offenem Home-Knopf ist nur die Startseite zu sehen (Dokument ganz verdeckt oder ausgeblendet); Esc und
+  „Zurück“ zeigen das Dokument wieder wie vorher. Unter macOS mit und ohne Liquid Glass und unter Windows prüfen.
+- **Test:** Oberflächentest in `start.spec.ts` (Home-Knopf mit offenem Dokument: Dokument nicht sichtbar bzw. verdeckt;
+  Bildschirmfoto ansehen), dazu Rückweg.
+- **Behoben:** Die Startseite über Dokumenten (`data-overlay`) bleibt mit nativem Glas deckend; Glas meldet die
+  Oberfläche dann nur für das Band (`native-glass.ts`). Test „Home-Knopf über einem Dokument“ in `regressions.spec.ts`.
+- **Noch offen:** vom Auftraggeber in der echten App zu bestätigen.
+
 ## Offen
 
 - **Windows:** von Hand ausprobieren (Auftraggeber), gefundene Fehler hier eintragen.

@@ -568,7 +568,8 @@
   visibility: hidden;
 }
 
-/* Mit Apples Glas unter dem Fenster scheint auf der Startseite der Schreibtisch durch (ADR 0023) */
-:global([data-native-glass='on']) .screen {
+/* Mit Apples Glas unter dem Fenster scheint auf der Startseite der Schreibtisch durch (ADR 0023). Nicht über offenen
+   Dokumenten (Home-Knopf): Dort deckt sie ab, sonst scheinen Dokument und Schreibtisch durch. */
+:global([data-native-glass='on']) .screen:not(.overlay) {
   background: transparent;
 }
