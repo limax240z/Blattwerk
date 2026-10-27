@@ -139,7 +139,7 @@ jobs:
       - name: Release anlegen
         env:
           GH_TOKEN: ${{ secrets.DOWNLOADS_TOKEN }}
-          REPOSITORY: MythicLimax/Blattwerk-Downloads
+          REPOSITORY: limax240z/Blattwerk-Downloads
         run: |
           if [ -z "$GH_TOKEN" ]; then
             echo "::warning::Secret DOWNLOADS_TOKEN fehlt, es wird nichts veröffentlicht."

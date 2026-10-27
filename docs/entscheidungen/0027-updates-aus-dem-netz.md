@@ -5,9 +5,11 @@ gehen. Ergänzt [0025](0025-updates.md), das neue Versionen nur aus einem Ordner
 
 ## Entscheidung
 
-- **Quelle:** ein öffentliches GitHub-Projekt nur für die fertigen Apps, `MythicLimax/Blattwerk-Downloads`
+- **Quelle:** ein öffentliches GitHub-Projekt nur für die fertigen Apps, `limax240z/Blattwerk-Downloads`
   (`UPDATE_REPOSITORY` in `src/shared/product.ts`). Der Quelltext bleibt im privaten Projekt. Der Auftraggeber hat diesen
-  Weg gewählt (Alternativen unten).
+  Weg gewählt (Alternativen unten). Bis 0.16.1 lag beides beim Konto `MythicLimax`; es wurde im Oktober 2026 von GitHub
+  gesperrt. Ab 0.16.2 gilt das neue Konto `limax240z`. Ältere Installationen finden dort nichts und brauchen die erste
+  Version vom neuen Konto einmal von Hand.
 - **Veröffentlichen:** Der CI-Job „Veröffentlichen“ läuft nach jedem Build auf `main`. Gibt es zur Version aus
   `package.json` noch kein Release `v<Version>`, legt er es mit allen Paketen an (macOS `.dmg` und `-mac.zip` je
   Prozessor, Windows `Setup.exe`). Er braucht das Secret `DOWNLOADS_TOKEN` (fein abgestufter Schlüssel, Schreibrecht nur

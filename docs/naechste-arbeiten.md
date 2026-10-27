@@ -30,7 +30,13 @@ Stand: 2026-10-24. Reihenfolge = Vorrang. Erledigte Punkte hier streichen und im
 - **Wasserzeichen, Kopf-/Fußzeilen:** Schriften des Rechners für alle Schriftsysteme.
 - **Werkzeuge:** „Dokument bereinigen“ (Metadaten, Anhänge, Skripte, Lesezeichen).
 
-## Behoben in 0.16.2, lokal (Zweig `home-knopf`; hochladen erst nach Go des Auftraggebers, GitHub-Sperre)
+## Umzug auf das GitHub-Konto `limax240z` (0.16.2)
+
+Das Konto `MythicLimax` wurde am 2026-10-26 gesperrt. Ab 0.16.2 liegen Quelltext und Downloads beim neuen Konto
+`limax240z` (`UPDATE_REPOSITORY`, CI-Job „Veröffentlichen“). Installationen bis 0.16.1 fragen noch beim alten Konto
+und brauchen 0.16.2 einmal von Hand (Mac: .dmg, Windows: Setup.exe).
+
+## Behoben in 0.16.2 (Zweig `home-knopf`)
 
 **Fehler: Home-Knopf überlagert das Dokument** (gemeldet 2026-10-26). Der Home-Knopf am Anfang der Tableiste zeigt die
 Startseite, aber das bisher Angezeigte verschwindet nicht: Startseite und Dokument liegen sichtbar übereinander.
@@ -51,7 +57,7 @@ Startseite, aber das bisher Angezeigte verschwindet nicht: Startseite und Dokume
   Bildschirmfoto ansehen), dazu Rückweg.
 - **Behoben:** Die Startseite über Dokumenten (`data-overlay`) bleibt mit nativem Glas deckend; Glas meldet die
   Oberfläche dann nur für das Band (`native-glass.ts`). Test „Home-Knopf über einem Dokument“ in `regressions.spec.ts`.
-- **Noch offen:** Pull Request, CI abwarten, Handy-Nachricht – erst nach dem Go.
+- **Noch offen:** vom Auftraggeber in der echten App zu bestätigen.
 
 ## Offen
 
