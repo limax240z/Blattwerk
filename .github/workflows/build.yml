@@ -1,5 +1,8 @@
 # Baut Blattwerk für macOS (Apple Silicon und Intel) und Windows und führt alle Tests aus.
 # Signieren mit Zertifikat ist optional: Sind die Secrets nicht gesetzt, wird die Mac-App nur ad hoc signiert.
+# Mac-Rechner abschalten: Variable MAC_IN_CI = false (Projekteinstellungen → Variables). Dann laufen nur die
+# Windows-Teile, die Mac-Dateien baut und lädt scripts/publish-mac-local.mjs vom eigenen Mac hoch. Grund: Das neue
+# Konto bekam im Oktober 2026 keine Mac-Rechner von GitHub (Aufträge brachen nach 15 Minuten Warten ab).
 name: Build
 
 on:
@@ -20,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: ${{ fromJSON(vars.MAC_IN_CI == 'false' && '["windows-latest"]' || '["macos-latest", "windows-latest"]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -62,13 +65,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: macOS
-            os: macos-latest
-            command: npm run dist:mac
-          - name: Windows
-            os: windows-latest
-            command: npm run dist:win
+        include: ${{ fromJSON(vars.MAC_IN_CI == 'false' && '[{"name":"Windows", "os":"windows-latest", "command":"npm run dist:win"}]' || '[{"name":"macOS", "os":"macos-latest", "command":"npm run dist:mac"}, {"name":"Windows", "os":"windows-latest", "command":"npm run dist:win"}]') }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -146,10 +143,14 @@ jobs:
             exit 0
           fi
           version="$(node -p "require('./package.json').version")"
-          if gh release view "v$version" --repo "$REPOSITORY" > /dev/null 2>&1; then
-            echo "Version $version ist schon veröffentlicht."
+          ls -l dist
+          # Gibt es das Release schon (etwa mit den vom Mac hochgeladenen Mac-Dateien), nur fehlende Dateien ergänzen
+          if existing="$(gh release view "v$version" --repo "$REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null)"; then
+            for file in dist/*; do
+              if grep -qxF "$(basename "$file")" <<< "$existing"; then continue; fi
+              gh release upload "v$version" "$file" --repo "$REPOSITORY"
+            done
             exit 0
           fi
-          ls -l dist
           gh release create "v$version" dist/* --repo "$REPOSITORY" --title "Blattwerk $version" \
             --notes "Automatisch gebaut aus ${GITHUB_SHA::7}. Updates lädt Blattwerk über „Nach Updates suchen …“ selbst."

@@ -230,6 +230,7 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 | `npm run licenses` | Lizenzprüfung der eingebündelten Pakete |
 | `npm run dist:mac:local` | Mac-App (Apple Silicon) bauen, `.dmg` nach `release/` |
 | `npm run dist:mac`, `npm run dist:win` | Pakete für CI (beide Mac-Architekturen bzw. Windows) |
+| `npm run publish:mac` | Mac-Pakete auf diesem Mac bauen und ins Release der aktuellen Version laden (nur von `main`; solange CI keine Mac-Rechner hat, `MAC_IN_CI = false`) |
 
 **In der Claude-Sandbox:** Electron, Playwright-Oberflächentests, `npm run fixtures` (wegen `sips`) und Packaging laufen nur außerhalb der Sandbox. **In der Cloud (Linux):** `node node_modules/electron/install.js` lädt Electron, danach laufen die Oberflächentests mit `BLATTWERK_E2E_SHOW=1 xvfb-run -a -s "-screen 0 1920x1200x24" npx playwright test` (sichtbar auf dem virtuellen Bildschirm; verborgen dauert dort jede Mausbewegung etwa 1 s und Tests mit Ziehen laufen in die Zeitgrenze). Unter Linux wird „Liste leeren … Liste des Systems“ übersprungen (gibt es nur unter macOS und Windows), PDFKit-Prüfungen laufen nur auf dem Mac. Mit Node 22 scheitert zudem ein Umwandlungstest (Windows-1252), das Projekt braucht Node 24. Kein Packaging.
 
