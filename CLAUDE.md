@@ -21,7 +21,7 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 
 Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig.
 
-- **Ort:** `~/Entwicklung/Blattwerk` (nicht in iCloud). Bis Phase 1 lag das Projekt in `~/Documents`, das iCloud abgleicht; dort entstanden Konfliktkopien („Datei 2.js“) in `node_modules`, `out/` und `src/renderer/public/`. Projekt nie wieder in einen iCloud-Ordner legen.
+- **Ort:** `~/Projekte/Blattwerk` (nicht in iCloud; bis 2026-10-27 `~/Entwicklung/Blattwerk`). Bis Phase 1 lag das Projekt in `~/Documents`, das iCloud abgleicht; dort entstanden Konfliktkopien („Datei 2.js“) in `node_modules`, `out/` und `src/renderer/public/`. Projekt nie wieder in einen iCloud-Ordner legen.
 - **Ablauf ab Phase 2 (Auftraggeber, 2026-10-12):** Phasen 2 bis 7 ohne Pause durcharbeiten. Nach jeder Phase trotzdem Bericht in `docs/phasen/`, Commit „Phase N abgeschlossen“ und neue `.dmg`, aber nicht auf OK warten. Nur bei echten Weichenstellungen nachfragen.
 
 ## Arbeitsweise (verbindlich)
