@@ -4,5 +4,5 @@
     "lib": ["ES2024"],
     "types": ["node"]
   },
-  "include": ["src/main", "src/preload", "src/shared", "src/locales", "scripts/**/*.ts", "test/unit", "test/integration", "test/fixtures/expectations.ts", "vite.renderer.config.ts", "vitest.config.ts"]
+  "include": ["src/main", "src/preload", "src/shared", "src/locales", "scripts/**/*.ts", "test/unit", "test/integration", "test/fixtures/expectations.ts", "vite.renderer.config.ts", "vite.ios.config.ts", "vitest.config.ts"]
 }

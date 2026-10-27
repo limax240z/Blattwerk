@@ -242,12 +242,12 @@
   "start": {
     "title": "{{appName}}",
     "open": "PDF öffnen",
-    "dropHint": "oder Dateien ins Fenster ziehen – PDF, Word, OpenDocument, RTF",
+    "dropHint": "oder Dateien hierher ziehen – PDF, Word, OpenDocument, RTF",
     "recent": "Zuletzt geöffnet",
     "noRecent": "Noch keine Dateien geöffnet.",
     "remove": "Aus der Liste entfernen",
     "clear": "Liste leeren",
-    "tagline": "PDFs lesen, kommentieren, bearbeiten und unterschreiben – alles auf diesem Mac, ohne Internet.",
+    "tagline": "PDFs lesen, kommentieren, bearbeiten und unterschreiben – alles auf diesem Gerät, ohne Internet.",
     "create": "Neu",
     "tiles": {
       "combine": {
@@ -1107,7 +1107,7 @@
       "deu": "Deutsch",
       "eng": "Englisch"
     },
-    "hint": "Seiten, die schon Text enthalten, werden übersprungen. Die Erkennung läuft auf diesem Mac, ohne Internet; je Seite dauert sie einige Sekunden.",
+    "hint": "Seiten, die schon Text enthalten, werden übersprungen. Die Erkennung läuft auf diesem Gerät, ohne Internet; je Seite dauert sie einige Sekunden.",
     "cancel": "Abbrechen",
     "start": "Erkennen",
     "progress": "Text wird erkannt",
