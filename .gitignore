@@ -25,3 +25,8 @@ Thumbs.db
 
 # Vom Build kopierte pdf.js-Ressourcen
 src/renderer/public/
+
+# iPad-App (Xcode)
+ios/build/
+ios/Blattwerk.xcodeproj/xcuserdata/
+ios/Blattwerk.xcodeproj/project.xcworkspace/xcuserdata/

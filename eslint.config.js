@@ -27,7 +27,7 @@ const noLiteralUiText = {
 
 export default tseslint.config(
   {
-    ignores: ['out/**', 'release/**', '.tools/**', 'node_modules/**', 'src/renderer/public/**', 'test/fixtures/**', 'coverage/**', 'playwright-report/**', 'test-results/**'],
+    ignores: ['out/**', 'release/**', '.tools/**', 'node_modules/**', 'src/renderer/public/**', 'test/fixtures/**', 'coverage/**', 'playwright-report/**', 'test-results/**', 'ios/build/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

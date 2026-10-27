@@ -18,10 +18,11 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 5 | Bearbeiten (inkl. Schwärzen) | erledigt ([Bericht](docs/phasen/phase-5.md)) |
 | 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | erledigt ([Bericht](docs/phasen/phase-6.md)) |
 | 7 | Profi (PAdES, PDF/A, Tags) | erledigt ([Bericht](docs/phasen/phase-7.md)) |
+| – | iPad-App (SideStore) | erledigt ([Bericht](docs/phasen/ipad.md), [Anleitung](docs/ipad-installieren.md)) |
 
 Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig.
 
-- **Ort:** `~/Entwicklung/Blattwerk` (nicht in iCloud). Bis Phase 1 lag das Projekt in `~/Documents`, das iCloud abgleicht; dort entstanden Konfliktkopien („Datei 2.js“) in `node_modules`, `out/` und `src/renderer/public/`. Projekt nie wieder in einen iCloud-Ordner legen.
+- **Ort:** `~/Projekte/Blattwerk` (nicht in iCloud; bis 2026-10-27 `~/Entwicklung/Blattwerk`). Bis Phase 1 lag das Projekt in `~/Documents`, das iCloud abgleicht; dort entstanden Konfliktkopien („Datei 2.js“) in `node_modules`, `out/` und `src/renderer/public/`. Projekt nie wieder in einen iCloud-Ordner legen.
 - **Ablauf ab Phase 2 (Auftraggeber, 2026-10-12):** Phasen 2 bis 7 ohne Pause durcharbeiten. Nach jeder Phase trotzdem Bericht in `docs/phasen/`, Commit „Phase N abgeschlossen“ und neue `.dmg`, aber nicht auf OK warten. Nur bei echten Weichenstellungen nachfragen.
 
 ## Arbeitsweise (verbindlich)
@@ -96,6 +97,16 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - Es ist immer höchstens ein Bearbeitungsmodus aktiv (Kommentieren, Schwärzen, Formular bearbeiten, Inhalt bearbeiten, Seiten organisieren).
 - Dieses Verfahren (Snapshot der Dokumentbytes) gilt für Seiten-, Feld-, Wasserzeichen- und Inhaltsänderungen sowie für das Schwärzen. Nach dem Speichern beginnt der Verlauf neu.
 
+### iPad-App ([ADR 0029](docs/entscheidungen/0029-ipad-app.md))
+
+- Eigene Hülle in Swift (`ios/`, Xcode-Projekt mit synchronisiertem Ordner `ios/Blattwerk/`, kein Paket aus dem Netz): `WKWebView` zeigt dieselbe Oberfläche, Dateien über `app://bundle/` (`SchemeHandler.swift`, CSP aus `web/csp.txt`, das `vite.ios.config.ts` aus `CONTENT_SECURITY_POLICY` erzeugt). Einstieg `src/ios/entry.ts`: erst `install.ts` (setzt `window.blattwerk` und `data-platform="ipad"`), dann `renderer/main`.
+- `src/ios/api.ts` setzt `BlattwerkApi` auf Bausteine der Hülle (`AppHost.swift`): kleine Werte über `call` (`WKScriptMessageHandlerWithReply`, `Bridge.swift`), Bytes über `fetch` an `app://bundle/__native/…` (`file` lesen, `save` schreiben, `stage` vorbereiten, `folder`, `store`, `font`). **Rumpf als `Uint8Array` senden, nie als `Blob`**: Einen Blob reicht WebKit an Schema-Handler ohne Inhalt weiter.
+- Dateien an Ort und Stelle (`FileRegistry.swift`: Sicherheitsbereich, Lesezeichen für „Zuletzt geöffnet“, `NSFileCoordinator`; Schreiben erst atomar, sonst direkt). Sichern unter, neue Dokumente und Exporte über den Sichern-Dialog der Dateien-App (`forExporting`), mehrere Dateien über einen gewählten Ordner. HTML → PDF (Vorlagen, Textdokumente) mit `UIPrintPageRenderer` in einer WebView ohne JavaScript und Netz (`HtmlToPdf.swift`; Seitengröße und Ränder kommen als Werte, `@page` wirkt dort nicht).
+- Wiederverwendet aus dem Hauptprozess: `buildMenuTemplate` (`src/main/menu-template.ts`, `platform: 'ios'` lässt Mac-Einträge weg) → Menüleiste von iPadOS (`src/ios/menu.ts`, `MenuBar.swift`), `detectAndConvert` (`src/main/convert/`, ZIP mit fflate), `templateHtml`, `blankPdf` (`src/shared/blank-pdf.ts`). Neue Methoden in `BlattwerkApi` brauchen eine Umsetzung in `src/ios/api.ts` (`tsconfig.ios.json` prüft das).
+- Pinch-Zoom: `src/ios/touch.ts` übersetzt die Geste von WebKit in Strg + Mausrad. Schriften für neuen Text: `src/ios/fonts.ts` (PostScript-Namen, nur einzelne TTF/OTF von iPadOS).
+- Nicht auf dem iPad: mehrere Fenster, Updates (SideStore), Standardprogramm, natives Liquid Glass.
+- Entwicklung: `npm run build:ios`, dann `scripts/run-ios-sim.sh` (baut, startet im Simulator ohne Fenster, gibt Fehler der Oberfläche aus `Library/Caches/oberflaeche.log` aus und legt ein Bildschirmfoto nach `$TMPDIR/blattwerk-ipad.png`). Nur in Debug-Builds: `BLATTWERK_OPEN=<Pfad>` öffnet eine Datei, `BLATTWERK_EVAL=<Pfad zu .js>` führt ein Prüfskript in der Oberfläche aus.
+
 ### Speichern (Grundregeln aus der Spezifikation, ab Phase 2)
 
 1. PDFium erzeugt die neuen Bytes, standardmäßig **inkrementell** (`FPDF_INCREMENTAL`).
@@ -128,7 +139,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0028)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0029)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index (Fenster je Dokument), window, window-layout, menu, ipc, security, protocol(+paths), print,
@@ -151,9 +162,11 @@ src/
                             coords.ts, pdfium-client.ts
     styles/                 Design-Tokens, hell/dunkel
     public/                 beim Build kopierte pdf.js- und OCR-Ressourcen (nicht eingecheckt)
+  ios/                      iPad-App (ADR 0029): window.blattwerk über die Swift-Hülle (api, native, menu, accelerator, touch, fonts, entry)
   workers/pdfium/           Bearbeitungs- und Speicher-Engine (engine, pages, forms, redact, text-search, content, render, memory,
                             protocol, worker), mit pdf-lib: fields, imported, sanitize + redaction, stamping, protection, compress, compare
-resources/icon.svg          eigenes App-Symbol (Quelle)
+resources/icon.svg          eigenes App-Symbol (Quelle); icon-ios.svg randlos für das iPad (gerendert mit qlmanage, ohne Alphakanal)
+ios/                        Xcode-Projekt der iPad-App (Swift-Hülle, Info.plist, App-Symbol)
 build/                      icon.png (aus resources/icon.svg erzeugt), after-pack.cjs
 native/macos-glass/        native Erweiterung für Apples Liquid Glass (Objective-C++, Node-API), gebaut von scripts/build-native.mjs
 scripts/                    build, build-native, dev, generate-fixtures, check-licenses, dist-mac-local, smoke-packaged, smoke-update, smoke-update-win, make-icon, dev-env.sh
@@ -230,11 +243,15 @@ Node.js liegt projektlokal in `.tools/node` (nicht eingecheckt). Vor jedem Befeh
 | `npm run licenses` | Lizenzprüfung der eingebündelten Pakete |
 | `npm run dist:mac:local` | Mac-App (Apple Silicon) bauen, `.dmg` nach `release/` |
 | `npm run dist:mac`, `npm run dist:win` | Pakete für CI (beide Mac-Architekturen bzw. Windows) |
+| `npm run build:ios` | Oberfläche der iPad-App nach `out/ios/web` |
+| `npm run dist:ios` | iPad-App als unsignierte `.ipa` nach `release/` (SideStore signiert beim Installieren) |
 | `npm run publish:mac` | Mac-Pakete auf diesem Mac bauen und ins Release der aktuellen Version laden (nur von `main`; solange CI keine Mac-Rechner hat, `MAC_IN_CI = false`) |
 
 **In der Claude-Sandbox:** Electron, Playwright-Oberflächentests, `npm run fixtures` (wegen `sips`) und Packaging laufen nur außerhalb der Sandbox. **In der Cloud (Linux):** `node node_modules/electron/install.js` lädt Electron, danach laufen die Oberflächentests mit `BLATTWERK_E2E_SHOW=1 xvfb-run -a -s "-screen 0 1920x1200x24" npx playwright test` (sichtbar auf dem virtuellen Bildschirm; verborgen dauert dort jede Mausbewegung etwa 1 s und Tests mit Ziehen laufen in die Zeitgrenze). Unter Linux wird „Liste leeren … Liste des Systems“ übersprungen (gibt es nur unter macOS und Windows), PDFKit-Prüfungen laufen nur auf dem Mac. Mit Node 22 scheitert zudem ein Umwandlungstest (Windows-1252), das Projekt braucht Node 24. Kein Packaging.
 
 ## Packaging
+
+- iPad: `npm run dist:ios` (Xcode, Release, ohne Signatur), Installation mit SideStore nach [docs/ipad-installieren.md](docs/ipad-installieren.md). Unter iPadOS ab 18.
 
 - electron-builder: `.dmg` getrennt für arm64 und x64, Windows-Installer `.exe` (NSIS, x64).
 - Dateizuordnung `.pdf` (macOS `CFBundleDocumentTypes`, Windows ProgID). Standardprogramm festlegen ([ADR 0004](docs/entscheidungen/0004-standardprogramm.md)): unter macOS über Launch Services per JavaScript for Automation (nur in der installierten App), unter Windows öffnet die App die Einstellungsseite.

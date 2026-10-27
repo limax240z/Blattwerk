@@ -1,6 +1,7 @@
 // ZIP-Archive lesen (DOCX und ODT sind ZIP-Dateien). Nur „gespeichert“ und „Deflate“, mit Grenzen gegen
-// überdimensionierte oder präparierte Archive.
-import { inflateRawSync } from 'node:zlib';
+// überdimensionierte oder präparierte Archive. Entpackt mit fflate statt node:zlib, damit es auch auf dem iPad
+// (WebView, ADR 0029) läuft.
+import { inflateSync } from 'fflate';
 
 const MAX_ENTRIES = 20_000;
 const MAX_ENTRY_BYTES = 200 * 1024 * 1024;
@@ -55,7 +56,8 @@ export function readZip(bytes: Uint8Array): ZipArchive {
     const start = entry.local + 30 + view.getUint16(entry.local + 26, true) + view.getUint16(entry.local + 28, true);
     const data = bytes.subarray(start, start + entry.compressed);
     if (entry.method === 0) return data.slice();
-    if (entry.method === 8) return new Uint8Array(inflateRawSync(data, { maxOutputLength: Math.max(entry.size, 1) }));
+    // Höchstens die angegebene Größe (fflate kürzt längere Daten ab)
+    if (entry.method === 8) return inflateSync(data, { out: new Uint8Array(Math.max(entry.size, 1)) }).subarray(0, entry.size);
     throw new ZipError(`Komprimierung ${entry.method} nicht unterstützt`);
   };
   return {

@@ -282,7 +282,7 @@ export interface AppSettings {
 }
 
 export interface AppInfo {
-  platform: 'darwin' | 'win32' | 'linux';
+  platform: 'darwin' | 'win32' | 'linux' | 'ios';
   version: string;
   productName: string;
   e2e: boolean;
