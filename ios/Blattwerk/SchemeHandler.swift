@@ -45,14 +45,19 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
         }
         let path = url.path
         if path.hasPrefix("/__native/") {
-            let request = NativeRequest(
-                path: String(path.dropFirst("/__native/".count)),
-                method: urlSchemeTask.request.httpMethod ?? "GET",
-                query: Dictionary(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.map { ($0.name, $0.value ?? "") } ?? [], uniquingKeysWith: { _, last in last }),
-                body: Self.body(of: urlSchemeTask.request)
-            )
-            host.handleNative(request) { [weak self] response in
-                self?.respond(urlSchemeTask, status: response.status, body: response.body, type: response.type)
+            let original = urlSchemeTask.request
+            // Den Rumpf nicht im Hauptthread lesen: Als Strom kann er blockieren, bis WebKit ihn geliefert hat
+            queue.async { [weak self] in
+                guard let self else { return }
+                let request = NativeRequest(
+                    path: String(path.dropFirst("/__native/".count)),
+                    method: original.httpMethod ?? "GET",
+                    query: Dictionary(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.map { ($0.name, $0.value ?? "") } ?? [], uniquingKeysWith: { _, last in last }),
+                    body: Self.body(of: original)
+                )
+                self.host.handleNative(request) { [weak self] response in
+                    self?.respond(urlSchemeTask, status: response.status, body: response.body, type: response.type)
+                }
             }
             return
         }
@@ -74,7 +79,9 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
         DispatchQueue.main.async { self.stopped.insert(ObjectIdentifier(urlSchemeTask)) }
     }
 
-    // Rumpf einer Anfrage: direkt oder als Strom (WebKit liefert größere Rümpfe als Strom)
+    // Rumpf einer Anfrage: direkt oder als Strom (auf dem Gerät liefert WebKit Rümpfe als Strom). Lesen bis zum Ende
+    // (read liefert 0); hasBytesAvailable ist am Anfang oft noch falsch, der Rumpf kam dann leer an (Vorlagen auf dem
+    // iPhone öffneten als leere Datei). Ein Lesefehler gilt als fehlender Rumpf.
     private static func body(of request: URLRequest) -> Data? {
         if let body = request.httpBody { return body }
         guard let stream = request.httpBodyStream else { return nil }
@@ -84,9 +91,10 @@ final class SchemeHandler: NSObject, WKURLSchemeHandler {
         let size = 1 << 20
         let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: size)
         defer { buffer.deallocate() }
-        while stream.hasBytesAvailable {
+        while true {
             let read = stream.read(buffer, maxLength: size)
-            if read <= 0 { break }
+            if read < 0 { return nil }
+            if read == 0 { break }
             data.append(buffer, count: read)
         }
         return data
@@ -116,6 +124,13 @@ struct NativeRequest {
     let method: String
     let query: [String: String]
     let body: Data?
+
+    // Rumpf nur, wenn er vollständig angekommen ist: Die Oberfläche schickt die Länge mit (len); fehlt sie oder stimmt
+    // sie nicht, wird nichts geschrieben (sonst könnte eine Datei leer oder abgeschnitten überschrieben werden)
+    var completeBody: Data? {
+        guard let body, let expected = query["len"].flatMap(Int.init), body.count == expected, expected > 0 else { return nil }
+        return body
+    }
 }
 
 struct NativeResponse {

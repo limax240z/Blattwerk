@@ -36,7 +36,9 @@ export async function fetchBytes(path: string): Promise<Uint8Array | null> {
 
 // Bytes an die Hülle geben; Antwort als JSON
 export async function sendBytes<T>(path: string, bytes: Uint8Array, method: 'PUT' | 'POST' = 'PUT'): Promise<T> {
-  const response = await fetch(`${NATIVE_BASE}/${path}`, { method, body: bytes as Uint8Array<ArrayBuffer> });
+  // len: Die Hülle schreibt nur, wenn genau so viele Bytes angekommen sind
+  const separator = path.includes('?') ? '&' : '?';
+  const response = await fetch(`${NATIVE_BASE}/${path}${separator}len=${bytes.length}`, { method, body: bytes as Uint8Array<ArrayBuffer> });
   const text = await response.text();
   if (!response.ok) throw new Error(text || `native-send-${response.status}`);
   return (text ? JSON.parse(text) : null) as T;
