@@ -34,11 +34,24 @@ export async function fetchBytes(path: string): Promise<Uint8Array | null> {
   return new Uint8Array(await response.arrayBuffer());
 }
 
-// Bytes an die Hülle geben; Antwort als JSON
+// Größe eines Stücks über die Brücke (als Base64 etwa ein Drittel mehr)
+const UPLOAD_CHUNK = 4 * 1024 * 1024;
+
+// Bytes an die Hülle geben; Antwort als JSON. Die Bytes gehen stückweise über die Brücke (auf dem Gerät reicht WebKit
+// den Rumpf von fetch nicht an die Hülle weiter), die Anfrage selbst trägt nur Kennung und Länge. Die Hülle schreibt
+// nur, wenn genau so viele Bytes angekommen sind.
 export async function sendBytes<T>(path: string, bytes: Uint8Array, method: 'PUT' | 'POST' = 'PUT'): Promise<T> {
-  // len: Die Hülle schreibt nur, wenn genau so viele Bytes angekommen sind
+  const id = crypto.randomUUID();
+  try {
+    for (let offset = 0; offset < bytes.length; offset += UPLOAD_CHUNK) {
+      await call('upload.chunk', { id, data: bytesToBase64(bytes.subarray(offset, offset + UPLOAD_CHUNK)) });
+    }
+  } catch (error) {
+    void call('upload.discard', { id }).catch(() => undefined);
+    throw error;
+  }
   const separator = path.includes('?') ? '&' : '?';
-  const response = await fetch(`${NATIVE_BASE}/${path}${separator}len=${bytes.length}`, { method, body: bytes as Uint8Array<ArrayBuffer> });
+  const response = await fetch(`${NATIVE_BASE}/${path}${separator}upload=${id}&len=${bytes.length}`, { method });
   const text = await response.text();
   if (!response.ok) throw new Error(text || `native-send-${response.status}`);
   return (text ? JSON.parse(text) : null) as T;

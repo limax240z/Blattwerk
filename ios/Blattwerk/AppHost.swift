@@ -12,6 +12,11 @@ final class AppHost: NSObject {
     private var pendingIncoming: [[String: Any]] = []
     private var pickerDelegate: PickerDelegate?
     private let pdfMaker = HtmlToPdf()
+    // Bytes von der Oberfläche, stückweise über die Brücke angeliefert (upload.chunk): Auf dem Gerät reicht WebKit den
+    // Rumpf von fetch an den Schema-Handler nicht weiter (im Simulator schon). Abgeholt mit ?upload=<Kennung>.
+    private var uploads: [String: Data] = [:]
+    private let uploadLock = NSLock()
+    private static let maxUploadBytes = 1536 << 20
 
     func attach(controller: WebViewController) {
         self.controller = controller
@@ -74,6 +79,23 @@ final class AppHost: NSObject {
             reply(.success(nil))
         case "store.list":
             reply(.success(Storage.list(args["dir"] as? String ?? "")))
+        case "upload.chunk":
+            guard let id = args["id"] as? String, id.count <= 64, let base64 = args["data"] as? String, let chunk = Data(base64Encoded: base64) else {
+                reply(.failure(BridgeError("invalid-chunk")))
+                return
+            }
+            uploadLock.lock()
+            let size = (uploads[id]?.count ?? 0) + chunk.count
+            if size <= Self.maxUploadBytes { uploads[id, default: Data()].append(chunk) } else { uploads.removeValue(forKey: id) }
+            uploadLock.unlock()
+            reply(size <= Self.maxUploadBytes ? .success(nil) : .failure(BridgeError("too-large")))
+        case "upload.discard":
+            if let id = args["id"] as? String {
+                uploadLock.lock()
+                uploads.removeValue(forKey: id)
+                uploadLock.unlock()
+            }
+            reply(.success(nil))
         case "store.remove":
             if let path = args["path"] as? String { Storage.remove(path) }
             reply(.success(nil))
@@ -159,7 +181,7 @@ final class AppHost: NSObject {
                 return .notFound
             }
         case ("save", "PUT"):
-            guard let data = request.completeBody else { return .error(400, "incomplete-body") }
+            guard let data = completeBody(request) else { return .error(400, "incomplete-body") }
             guard let file = files.get(rest) else { return .json(["ok": false, "error": "unknown-file"]) }
             if request.query["force"] != "1", !files.isUnchanged(file) { return .json(["ok": false, "error": "changed-externally"]) }
             do {
@@ -169,7 +191,7 @@ final class AppHost: NSObject {
                 return .json(["ok": false, "error": "write-failed", "detail": String(describing: error)])
             }
         case ("stage", "PUT"):
-            guard let data = request.completeBody else { return .error(400, "incomplete-body") }
+            guard let data = completeBody(request) else { return .error(400, "incomplete-body") }
             do {
                 let url = try Staging.write(data, name: request.query["name"] ?? "Dokument.pdf")
                 if request.query["open"] == "1" {
@@ -181,7 +203,7 @@ final class AppHost: NSObject {
                 return .error(500, String(describing: error))
             }
         case ("folder", "PUT"):
-            guard let data = request.completeBody else { return .error(400, "incomplete-body") }
+            guard let data = completeBody(request) else { return .error(400, "incomplete-body") }
             guard let folder = files.get(rest) else { return .json(["ok": false, "error": "unknown-folder"]) }
             do {
                 let name = try writeUnique(data, name: Staging.safeName(request.query["name"] ?? "Datei"), in: folder.url)
@@ -193,7 +215,7 @@ final class AppHost: NSObject {
             guard let data = Storage.read(rest) else { return .notFound }
             return .bytes(data)
         case ("store", "PUT"):
-            guard let data = request.completeBody else { return .error(400, "incomplete-body") }
+            guard let data = completeBody(request) else { return .error(400, "incomplete-body") }
             do {
                 try Storage.write(rest, data)
                 return .json(true)
@@ -206,6 +228,20 @@ final class AppHost: NSObject {
         default:
             return .notFound
         }
+    }
+
+    // Bytes einer Anfrage: aus den angelieferten Stücken (upload) oder dem Rumpf. Nur vollständig: Die Oberfläche schickt
+    // die Länge mit (len); fehlt sie oder stimmt sie nicht, wird nichts geschrieben (sonst könnte eine Datei leer oder
+    // abgeschnitten überschrieben werden).
+    private func completeBody(_ request: NativeRequest) -> Data? {
+        var body = request.body
+        if let id = request.query["upload"] {
+            uploadLock.lock()
+            body = uploads.removeValue(forKey: id)
+            uploadLock.unlock()
+        }
+        guard let body, let expected = request.query["len"].flatMap(Int.init), expected > 0, body.count == expected else { return nil }
+        return body
     }
 
     // „Name.pdf“, sonst „Name (2).pdf“ …; vorhandene Dateien werden nie überschrieben
