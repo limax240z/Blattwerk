@@ -38,3 +38,17 @@ export function installPinchZoom(): void {
   document.addEventListener('gesturechange', onChange, { passive: false });
   document.addEventListener('gestureend', (event) => event.preventDefault(), { passive: false });
 }
+
+// Zeichnen, Verschieben und Anfasser mit dem Finger (iPhone, iPad): WebKit beachtet touch-action: none an SVG-Elementen
+// nicht und scrollt die Seite, statt die Zeigerereignisse an die Kommentarebene zu geben. Dort wird die Bewegung
+// deshalb selbst angehalten (PageOverlay.tsx setzt data-touch-draw, die Anfasser tragen data-handle).
+export function installTouchDrawing(): void {
+  document.addEventListener(
+    'touchmove',
+    (event) => {
+      const target = event.target as Element | null;
+      if (event.cancelable && target?.closest?.('[data-touch-draw], [data-handle]')) event.preventDefault();
+    },
+    { passive: false },
+  );
+}

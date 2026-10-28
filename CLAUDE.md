@@ -18,7 +18,7 @@ Desktop-PDF-Editor für macOS und Windows nach dem Bedienkonzept von Acrobat Pro
 | 5 | Bearbeiten (inkl. Schwärzen) | erledigt ([Bericht](docs/phasen/phase-5.md)) |
 | 6 | Werkzeuge (OCR, Komprimieren, Passwort, Export, Vergleich) | erledigt ([Bericht](docs/phasen/phase-6.md)) |
 | 7 | Profi (PAdES, PDF/A, Tags) | erledigt ([Bericht](docs/phasen/phase-7.md)) |
-| – | iPad-App (SideStore) | erledigt ([Bericht](docs/phasen/ipad.md), [Anleitung](docs/ipad-installieren.md)) |
+| – | iPad- und iPhone-App | erledigt ([Bericht](docs/phasen/ipad.md), [Anleitung](docs/ipad-installieren.md)) |
 
 Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001-pdf-bibliotheken.md)), Name Blattwerk, ISC-Lizenz zulässig.
 
@@ -105,6 +105,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 - Wiederverwendet aus dem Hauptprozess: `buildMenuTemplate` (`src/main/menu-template.ts`, `platform: 'ios'` lässt Mac-Einträge weg) → Menüleiste von iPadOS (`src/ios/menu.ts`, `MenuBar.swift`), `detectAndConvert` (`src/main/convert/`, ZIP mit fflate), `templateHtml`, `blankPdf` (`src/shared/blank-pdf.ts`). Neue Methoden in `BlattwerkApi` brauchen eine Umsetzung in `src/ios/api.ts` (`tsconfig.ios.json` prüft das).
 - Pinch-Zoom: `src/ios/touch.ts` übersetzt die Geste von WebKit in Strg + Mausrad. Schriften für neuen Text: `src/ios/fonts.ts` (PostScript-Namen, nur einzelne TTF/OTF von iPadOS).
 - Nicht auf dem iPad: mehrere Fenster, Updates (SideStore), Standardprogramm, natives Liquid Glass.
+- **iPhone und Kompaktansicht** ([ADR 0030](docs/entscheidungen/0030-kompaktansicht-iphone.md)): dieselbe App (`TARGETED_DEVICE_FAMILY = 1,2`). Unter 600 Punkt Breite (`src/renderer/app/compact.ts`, `useCompact`, `data-compact`) zeigt die Werkzeugleiste „Alle Befehle“ (`CommandSheet.tsx`, Inhalt aus `buildMenuTemplate`), Seitenleisten liegen über dem Dokument und schließen sich nach einem Seitenwechsel. Die Mac-App erreicht diese Breite nie (`minWidth: 760`). Auf iPad und iPhone haben Dialoge einen festen Hintergrund (WebKit zeichnet die Unschärfe hinter `<dialog>` nicht), sichere Ränder über `env(safe-area-inset-*)`. Zeichnen mit dem Finger: WebKit beachtet `touch-action` an SVG nicht, `installTouchDrawing` (`src/ios/touch.ts`) hält das Scrollen über `[data-touch-draw]` und `[data-handle]` an.
 - Entwicklung: `npm run build:ios`, dann `scripts/run-ios-sim.sh` (baut, startet im Simulator ohne Fenster, gibt Fehler der Oberfläche aus `Library/Caches/oberflaeche.log` aus und legt ein Bildschirmfoto nach `$TMPDIR/blattwerk-ipad.png`). Nur in Debug-Builds: `BLATTWERK_OPEN=<Pfad>` öffnet eine Datei, `BLATTWERK_EVAL=<Pfad zu .js>` führt ein Prüfskript in der Oberfläche aus.
 
 ### Speichern (Grundregeln aus der Spezifikation, ab Phase 2)
@@ -139,7 +140,7 @@ Hauptprozess (Node)                 Preload                       Renderer (Reac
 ```
 docs/
   spezifikation.md          Projektvorgabe (unverändert)
-  entscheidungen/           Architekturentscheidungen (ADR 0001–0029)
+  entscheidungen/           Architekturentscheidungen (ADR 0001–0030)
   phasen/                   Abschlussbericht je Phase
 src/
   main/                     Hauptprozess: index (Fenster je Dokument), window, window-layout, menu, ipc, security, protocol(+paths), print,

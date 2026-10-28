@@ -1,4 +1,4 @@
-# Blattwerk auf das iPad bringen
+# Blattwerk auf iPad und iPhone bringen
 
 Blattwerk für das iPad wird nicht im App Store veröffentlicht. Du installierst es mit **SideStore**, einem kostenlosen Programm, das Apps mit deiner eigenen Apple-ID auf dein iPad bringt. Apple lässt solche Apps nur **7 Tage** laufen. SideStore verlängert sie aber selbst, auch ohne Mac, sobald es einmal eingerichtet ist.
 
@@ -31,14 +31,14 @@ Klemmt etwas, hilft die offizielle Anleitung: <https://docs.sidestore.io/docs/in
 Seit Mitte Oktober 2026 lehnt Apple die Anmeldung in SideStore oft mit dem Fehler **-80045** ab ([SideStore #1652](https://github.com/SideStore/SideStore/issues/1652)). iloader auf dem Mac meldet sich dagegen erfolgreich an (Anisette-Server „Jkcoxson (Mac)“). Bis SideStore das behebt, kommt Blattwerk deshalb so aufs iPad:
 
 1. iPad per Kabel an den Mac, iloader öffnen, angemeldet bleiben, iPad auswählen.
-2. Unter „Installers“ auf **„Import IPA“** klicken und `release/Blattwerk-0.17.0-iPad.ipa` wählen.
+2. Unter „Installers“ auf **„Import IPA“** klicken und `release/Blattwerk-0.17.0-iPad-iPhone.ipa` wählen.
 3. Warten, bis iloader fertig meldet.
 
 **Verlängern:** Dasselbe alle 7 Tage wiederholen (vor Ablauf). Die Daten in Blattwerk bleiben dabei erhalten. Bei mehrmaligen Fehlversuchen in SideStore nicht weiter probieren, sonst sperrt Apple die Anmeldung für eine Weile.
 
 ### Mit SideStore (sobald die Anmeldung dort wieder geht)
 
-1. Auf dem Mac liegt die App im Projektordner unter `release/`, zum Beispiel `Blattwerk-0.17.0-iPad.ipa`.
+1. Auf dem Mac liegt die App im Projektordner unter `release/`, zum Beispiel `Blattwerk-0.17.0-iPad-iPhone.ipa`.
 2. Schick die Datei per **AirDrop** an das iPad. Sie landet in der Dateien-App unter „Downloads“.
 3. Verbinde LocalDevVPN, öffne SideStore, tippe unter „My Apps“ oben auf **„+“** und wähle die `.ipa`-Datei.
 4. Nach einem Moment erscheint Blattwerk auf dem Home-Bildschirm.
@@ -52,6 +52,12 @@ Seit Mitte Oktober 2026 lehnt Apple die Anmeldung in SideStore oft mit dem Fehle
 ## Neue Version
 
 Für eine neue Version bekommst du eine neue `.ipa`. Installiere sie wie oben über „+“ in SideStore. Die alte Version wird ersetzt, deine Unterschriften, eigenen Vorlagen und die Liste „Zuletzt geöffnet“ bleiben erhalten.
+
+## iPhone
+
+Die `.ipa` ist dieselbe für iPad und iPhone. Aufs iPhone kommt sie genauso wie aufs iPad: iPhone per Kabel an den Mac, in iloader das iPhone auswählen, „Import IPA“. Vorher einmal auf dem iPhone dem Entwickler vertrauen und den Entwicklermodus einschalten (Schritte 6 und 7 oben). Jedes Gerät hat eigene 3 Plätze und eigene 7 Tage.
+
+Auf dem iPhone gibt es keine Menüleiste. Alle Befehle stehen hinter dem Knopf **☰** oben rechts, die Werkzeuge hinter **⋯**.
 
 ## So arbeitest du mit Blattwerk auf dem iPad
 
