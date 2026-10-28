@@ -15,7 +15,7 @@ import { useHistory } from '../state/history-store';
 import { getActiveTab, useDocuments } from '../state/documents-store';
 import { useUi } from '../state/ui-store';
 
-function computeMenuState(): MenuState {
+export function computeMenuState(): MenuState {
   const { tabs, activeId } = useDocuments.getState();
   const ui = useUi.getState();
   const active = tabs.find((tab) => tab.id === activeId);

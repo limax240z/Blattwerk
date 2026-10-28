@@ -442,6 +442,8 @@ export function PageOverlay({
       ].join(' ')}
       viewBox={`0 0 ${geometry.width} ${geometry.height}`}
       preserveAspectRatio="none"
+      // Mit dem Finger zeichnen statt scrollen: WebKit beachtet touch-action an SVG nicht (src/ios/touch.ts)
+      data-touch-draw={drawing || gesture ? '' : undefined}
       onPointerDown={onBackgroundPointerDown}
       // Beim Zeichnen weder Text auswählen noch den Fokus wechseln (sonst verliert ein neues Textfeld ihn sofort)
       onMouseDown={(event) => {

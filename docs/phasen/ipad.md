@@ -1,4 +1,4 @@
-# Bericht: iPad-App
+# Bericht: iPad- und iPhone-App
 
 Stand: 2026-10-27 · Version 0.17.0 · Entscheidung: [ADR 0029](../entscheidungen/0029-ipad-app.md) · Installation: [ipad-installieren.md](../ipad-installieren.md)
 
@@ -44,3 +44,17 @@ Fürs iPad neu:
 - Der Sichern-Dialog der Dateien-App lässt den Dateinamen nicht ändern. Neue Dokumente bekommen den vorgeschlagenen Namen.
 - Liegt ein PDF bei einem Anbieter, der nur Zugriff auf die einzelne Datei gibt, schreibt Blattwerk direkt in die Datei, ohne atomares Ersetzen.
 - Die App läuft mit kostenloser Apple-ID nur 7 Tage am Stück, danach muss SideStore sie verlängern.
+
+## iPhone (2026-10-28, ADR 0030)
+
+Dieselbe App läuft jetzt auch auf dem iPhone. Auf schmalen Bildschirmen (iPhone, iPad im geteilten Bildschirm) gilt eine Kompaktansicht:
+
+- Knopf **„Alle Befehle“** (☰) oben rechts zeigt alle Menüs als Liste, denn das iPhone hat keine Menüleiste.
+- Die Seitenleiste liegt über dem Dokument und schließt sich, sobald man eine Seite antippt.
+- Dialoge nutzen fast die ganze Breite.
+
+Geprüft im iPhone-Simulator (iPhone 18 Pro): Start, Startseite, Dokument öffnen, Befehlsliste, Seitenleiste, Werkzeuge unter „⋯“, Kommentarleiste, Zeichnen mit dem Finger, Dialog „Seitenzahlen“.
+
+Dabei behoben, auch für das iPad: Zeichnen mit dem Finger scrollte die Seite, statt zu malen. Dialoge waren durchsichtig.
+
+Noch nicht geprüft: auf einem echten iPhone, Querformat mit Notch, Bildschirmtastatur bei Textfeldern.

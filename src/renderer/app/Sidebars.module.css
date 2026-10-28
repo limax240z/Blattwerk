@@ -92,3 +92,13 @@
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+
+/* Kompaktansicht (iPhone, ADR 0030): Seitenleisten schweben über dem Dokument statt daneben */
+:global([data-compact]) .left,
+:global([data-compact]) .right {
+  position: absolute;
+  inset: 8px 0 0;
+  z-index: 5;
+  width: auto;
+  margin: 0 8px 8px;
+}

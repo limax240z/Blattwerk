@@ -11,6 +11,13 @@ body,
   margin: 0;
 }
 
+/* iPad und iPhone (ADR 0029/0030): Die Hülle hält oben den sicheren Rand frei; seitlich (Notch quer) und unten
+   (Home-Balken) übernimmt das die Oberfläche */
+[data-platform='ipad'] #root {
+  box-sizing: border-box;
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
 body {
   font-family: var(--font-ui);
   font-size: var(--font-size-md);

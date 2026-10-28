@@ -34,8 +34,8 @@ rmSync(staging, { recursive: true, force: true });
 mkdirSync(path.join(staging, 'Payload'), { recursive: true });
 run('ditto', [path.join(derived, 'Build/Products/Release-iphoneos/Blattwerk.app'), path.join(staging, 'Payload/Blattwerk.app')]);
 mkdirSync(path.join(root, 'release'), { recursive: true });
-const target = path.join(root, 'release', `Blattwerk-${version}-iPad.ipa`);
+const target = path.join(root, 'release', `Blattwerk-${version}-iPad-iPhone.ipa`);
 rmSync(target, { force: true });
 // ZIP ohne macOS-Zusatzdaten (__MACOSX, erweiterte Attribute)
 run('ditto', ['-c', '-k', '--norsrc', '--noextattr', '--keepParent', 'Payload', target], staging);
-console.log(`iPad-App fertig: ${path.relative(root, target)}`);
+console.log(`iPad- und iPhone-App fertig: ${path.relative(root, target)}`);

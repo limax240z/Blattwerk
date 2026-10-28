@@ -9,6 +9,7 @@ import {
   Ellipsis,
   Info,
   LayoutGrid,
+  Menu,
   MessageSquare,
   PanelLeft,
   Printer,
@@ -23,6 +24,8 @@ import {
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { CommandSheet } from './CommandSheet';
+import { useCompact } from './compact';
 import type { ViewMode } from '../../shared/ipc';
 import { IconButton } from '../components/IconButton';
 import { GLASS, useLiquidGlass } from '../components/glass/liquid-glass';
@@ -294,6 +297,9 @@ export function Toolbar() {
   const level = useCollapseLevel(headerRef);
   const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
+  // Kompaktansicht (iPhone): alle Befehle als Liste, es gibt keine Menüleiste (ADR 0030)
+  const compact = useCompact();
+  const [commandsOpen, setCommandsOpen] = useState(false);
   const ready = tab?.status === 'ready';
   const dirty = ready && tabDirty;
   // Im Raster „Seiten organisieren“ gibt es keine Hauptansicht: Zoom, Blättern, Suche und Kommentare entfallen.
@@ -483,7 +489,7 @@ export function Toolbar() {
         </div>
       )}
 
-      {ready && (
+      {(ready || compact) && (
         <div className={styles.end}>
           {shown('modes')}
           {shown('info')}
@@ -500,6 +506,11 @@ export function Toolbar() {
               </span>
             </GlassGroup>
           )}
+          {compact && (
+            <GlassGroup>
+              <IconButton icon={Menu} label={t('toolbar.commands')} pressed={commandsOpen} onClick={() => setCommandsOpen(true)} data-testid="commands-button" />
+            </GlassGroup>
+          )}
         </div>
       )}
       {menuOpen && (
@@ -511,6 +522,7 @@ export function Toolbar() {
           ))}
         </MorePanel>
       )}
+      {commandsOpen && <CommandSheet onClose={() => setCommandsOpen(false)} />}
     </header>
   );
 }

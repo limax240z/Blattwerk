@@ -51,6 +51,7 @@ import { SaveTemplateDialog } from '../features/start/SaveTemplateDialog';
 import { TabBar } from './TabBar';
 import { Toolbar } from './Toolbar';
 import { useAnnotationSync, useFileDrop, useGlobalKeys, useMenuStateSync } from './hooks';
+import { useCompact } from './compact';
 
 export function App() {
   const tabs = useDocuments((s) => s.tabs);
@@ -122,6 +123,19 @@ export function App() {
   useEffect(() => {
     document.title = active ? `${active.name} – ${PRODUCT_NAME}` : PRODUCT_NAME;
   }, [active]);
+
+  // Kompaktansicht (ADR 0030): Seitenleisten liegen über dem Dokument, beim Wechsel dorthin sind sie zu; nach einem
+  // Seitenwechsel (Miniatur, Lesezeichen, Kommentar angetippt) schließt sich die linke Leiste von selbst
+  const compact = useCompact();
+  useEffect(() => {
+    if (!compact) return;
+    useUi.getState().setSidebarVisible(false);
+    useUi.getState().setRightPanelVisible(false);
+  }, [compact]);
+  const currentPage = active?.status === 'ready' ? active.currentPage : null;
+  useEffect(() => {
+    if (compact && currentPage !== null) useUi.getState().setSidebarVisible(false);
+  }, [compact, currentPage]);
 
   // Ein neuer oder anderer Tab beendet die Startseite als Überlagerung (Dokument aus Vorlage, zuletzt geöffnet, Tabwechsel)
   useEffect(() => {
