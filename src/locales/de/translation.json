@@ -461,7 +461,8 @@
     "stamp": "Stempel",
     "signature": "Unterschrift",
     "redact": "Schwärzung",
-    "redactText": "Text schwärzen"
+    "redactText": "Text schwärzen",
+    "eraser": "Radierer"
   },
   "colors": {
     "yellow": "Gelb",
@@ -497,6 +498,19 @@
     "color": "Farbe",
     "width": "Linienstärke",
     "widthValue": "{{value}} pt",
+    "eraser": {
+      "mode": {
+        "pixel": "Pixel-Radierer: löscht nur den überstrichenen Teil",
+        "stroke": "Strich-Radierer: löscht den ganzen Strich",
+        "highlighter": "Textmarker-Radierer: löscht nur Markierungen"
+      },
+      "size": "Größe des Radierers",
+      "sizes": {
+        "small": "Klein",
+        "medium": "Mittel",
+        "large": "Groß"
+      }
+    },
     "customStamp": {
       "choose": "Eigener Stempel …",
       "title": "Eigener Stempel",

@@ -59,6 +59,12 @@ Dabei behoben, auch für das iPad: Zeichnen mit dem Finger scrollte die Seite, s
 
 Noch nicht geprüft: auf einem echten iPhone, Querformat mit Notch, Bildschirmtastatur bei Textfeldern.
 
+## Radierer (2026-10-28, für alle Geräte)
+
+Neues Werkzeug in der Kommentarleiste, wie in GoodNotes: **Pixel-Radierer** (löscht nur den überstrichenen Teil), **Strich-Radierer** (ganzer Strich), **Textmarker-Radierer** (nur durchscheinende Striche und gelbe Hervorhebungen), jeweils klein, mittel oder groß. Ein Wisch lässt sich mit einem Schritt widerrufen. Geprüft mit Unit-Tests, einem Oberflächentest auf dem Mac und mit dem Finger im iPhone-Simulator.
+
+Außerdem: Auf dem echten Gerät gibt WebKit die Daten aus `fetch` nicht an die Hülle weiter. Die Bytes gehen deshalb stückweise über die Nachrichtenbrücke (Vorlagen und Speichern).
+
 ## Rückmeldungen vom echten iPhone (2026-10-28)
 
 - Oben blieb hinter der Statusleiste ein schwarzer Streifen, unten wurden Inhalte an einem festen Rand abgeschnitten. Jetzt reicht die Oberfläche bis an alle Ränder.

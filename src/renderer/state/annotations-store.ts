@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Annotation, Rgb, StampId } from '../../shared/annotations';
+import type { EraserMode, EraserSize } from '../../shared/eraser';
 
 export type Tool =
   | 'select'
@@ -18,7 +19,9 @@ export type Tool =
   | 'signature'
   // Schwärzen (Phase 5): Bereich aufziehen bzw. markierten Text schwärzen
   | 'redact'
-  | 'redactText';
+  | 'redactText'
+  // Radierer für Freihandzeichnungen (Art und Größe: eraser im Zustand)
+  | 'eraser';
 
 // Unterschrift, die beim nächsten Klick auf die Seite gesetzt wird (PNG als Base64)
 // Eigener Stempel (Werkzeug „Stempel“ mit stamp = 'custom'): Text, auf Wunsch Datum und Name in Zeile zwei
@@ -42,7 +45,7 @@ export interface PendingSignature {
 }
 
 export const MARKUP_TOOLS: readonly Tool[] = ['highlight', 'underline', 'strikeout', 'squiggly', 'redactText'];
-export const DRAWING_TOOLS: readonly Tool[] = ['note', 'freetext', 'ink', 'square', 'circle', 'line', 'arrow', 'stamp', 'signature', 'redact'];
+export const DRAWING_TOOLS: readonly Tool[] = ['note', 'freetext', 'ink', 'square', 'circle', 'line', 'arrow', 'stamp', 'signature', 'redact', 'eraser'];
 // Werkzeuge der Leiste „Schwärzen“
 export const REDACT_TOOLS: readonly Tool[] = ['redact', 'redactText'];
 
@@ -52,7 +55,9 @@ export type Command =
   // Mehrere auf einmal (Suchen und schwärzen): ein Schritt für Rückgängig
   | { type: 'addMany'; annotations: Annotation[] }
   | { type: 'remove'; annotation: Annotation; index: number }
-  | { type: 'update'; before: Annotation; after: Annotation };
+  | { type: 'update'; before: Annotation; after: Annotation }
+  // Mehrere Änderungen als ein Schritt (ein Wisch mit dem Radierer)
+  | { type: 'batch'; commands: Command[] };
 
 export interface TabAnnotations {
   // true, sobald alle Seiten eingelesen sind
@@ -96,6 +101,7 @@ export const DEFAULT_COLORS: Record<Tool, Rgb> = {
   signature: { r: 0, g: 0, b: 0 },
   redact: { r: 0.85, g: 0.11, b: 0.11 },
   redactText: { r: 0.85, g: 0.11, b: 0.11 },
+  eraser: { r: 0, g: 0, b: 0 },
 };
 
 interface AnnotationsState {
@@ -110,6 +116,7 @@ interface AnnotationsState {
   stamp: StampId;
   customStamp: CustomStamp;
   pendingSignature: PendingSignature | null;
+  eraser: { mode: EraserMode; size: EraserSize };
   init: (tabId: string) => void;
   // Gesicherten Zustand eines Dokumentstands wiederherstellen (Rückgängig/Wiederholen von Seitenoperationen)
   restore: (tabId: string, tab: TabAnnotations) => void;
@@ -133,6 +140,7 @@ interface AnnotationsState {
   setCustomStamp: (stamp: CustomStamp) => void;
   // Unterschrift zum Setzen wählen (schaltet das Werkzeug ein) oder verwerfen
   setPendingSignature: (signature: PendingSignature | null) => void;
+  setEraser: (eraser: { mode: EraserMode; size: EraserSize }) => void;
 }
 
 function run(items: Annotation[], command: Command): Annotation[] {
@@ -145,6 +153,8 @@ function run(items: Annotation[], command: Command): Annotation[] {
       return items.filter((a) => a.id !== command.annotation.id);
     case 'update':
       return items.map((a) => (a.id === command.after.id ? command.after : a));
+    case 'batch':
+      return command.commands.reduce(run, items);
   }
 }
 
@@ -163,6 +173,8 @@ function invert(items: Annotation[], command: Command): Annotation[] {
     }
     case 'update':
       return items.map((a) => (a.id === command.before.id ? command.before : a));
+    case 'batch':
+      return command.commands.reduceRight(invert, items);
   }
 }
 
@@ -187,6 +199,7 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     stamp: 'approved',
     customStamp: { text: '', date: true, name: true, color: 'blue' },
     pendingSignature: null,
+    eraser: { mode: 'pixel', size: 'medium' },
     init: (tabId) => set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...EMPTY } } })),
     restore: (tabId, tab) =>
       set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...tab, loaded: true, editingId: null } } })),
@@ -205,14 +218,18 @@ export const useAnnotations = create<AnnotationsState>((set) => {
         return { items: [...tab.items, ...added], originals, loaded: done || tab.loaded };
       }),
     apply: (tabId, command) =>
-      patch(tabId, (tab) => ({
-        items: run(tab.items, command),
-        undo: [...tab.undo, command],
-        redo: [],
-        // Wer nach Rückgängig etwas Neues macht, kann den gespeicherten Stand nicht mehr per Wiederholen erreichen.
-        savedCursor: tab.savedCursor > tab.undo.length ? -1 : tab.savedCursor,
-        selectedId: command.type === 'remove' && tab.selectedId === command.annotation.id ? null : tab.selectedId,
-      })),
+      patch(tabId, (tab) => {
+        const items = run(tab.items, command);
+        return {
+          items,
+          undo: [...tab.undo, command],
+          redo: [],
+          // Wer nach Rückgängig etwas Neues macht, kann den gespeicherten Stand nicht mehr per Wiederholen erreichen.
+          savedCursor: tab.savedCursor > tab.undo.length ? -1 : tab.savedCursor,
+          // Gelöschte (auch mit dem Radierer) sind nicht mehr ausgewählt
+          selectedId: keepSelection(items, tab.selectedId),
+        };
+      }),
     discard: (tabId, id) =>
       patch(tabId, (tab) => {
         const last = tab.undo.at(-1);
@@ -249,6 +266,7 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     setFill: (fill) => set({ fill }),
     setCustomStamp: (customStamp) => set({ customStamp }),
     setStamp: (stamp) => set({ stamp }),
+    setEraser: (eraser) => set({ eraser }),
     setPendingSignature: (pendingSignature) =>
       set((state) => ({ pendingSignature, tool: pendingSignature ? 'signature' : state.tool === 'signature' ? 'select' : state.tool })),
   };

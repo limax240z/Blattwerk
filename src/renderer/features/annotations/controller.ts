@@ -8,7 +8,7 @@ import type {
 } from '../../../shared/annotations';
 import { toPdfDate } from '../../../shared/annotations';
 import { getRuntime } from '../../engine/runtime';
-import { useAnnotations, tabAnnotations } from '../../state/annotations-store';
+import { useAnnotations, tabAnnotations, type Command } from '../../state/annotations-store';
 import { useHistory } from '../../state/history-store';
 import { useUi } from '../../state/ui-store';
 import { hiddenOriginals } from './changes';
@@ -139,6 +139,24 @@ export function deleteAnnotation(tabId: string, id: string): void {
   if (!annotation) return;
   newAction(tabId);
   useAnnotations.getState().apply(tabId, { type: 'remove', annotation, index });
+}
+
+// Ergebnis eines Wischs mit dem Radierer als ein Schritt: geänderte Freihandzeichnungen (Teile entfernt) und ganz
+// entfernte Kommentare (null). Die Lage in der Liste bleibt beim Rückgängigmachen erhalten.
+export function applyErase(tabId: string, changes: Record<string, Annotation | null>): void {
+  const tab = tabAnnotations(tabId);
+  if (!tab) return;
+  const updates: Command[] = [];
+  const removals: Command[] = [];
+  tab.items.forEach((annotation, index) => {
+    if (!(annotation.id in changes)) return;
+    const next = changes[annotation.id];
+    if (next === null) removals.push({ type: 'remove', annotation, index });
+    else if (next) updates.push({ type: 'update', before: annotation, after: { ...next, modified: now() } as Annotation });
+  });
+  if (updates.length + removals.length === 0) return;
+  newAction(tabId);
+  useAnnotations.getState().apply(tabId, { type: 'batch', commands: [...updates, ...removals] });
 }
 
 function find(tabId: string, id: string): Annotation | undefined {

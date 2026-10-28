@@ -124,13 +124,6 @@ struct NativeRequest {
     let method: String
     let query: [String: String]
     let body: Data?
-
-    // Rumpf nur, wenn er vollständig angekommen ist: Die Oberfläche schickt die Länge mit (len); fehlt sie oder stimmt
-    // sie nicht, wird nichts geschrieben (sonst könnte eine Datei leer oder abgeschnitten überschrieben werden)
-    var completeBody: Data? {
-        guard let body, let expected = query["len"].flatMap(Int.init), body.count == expected, expected > 0 else { return nil }
-        return body
-    }
 }
 
 struct NativeResponse {
