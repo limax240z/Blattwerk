@@ -194,6 +194,40 @@ test.describe('Kommentieren', () => {
     await handle.close();
   });
 
+  test('Radierer: Strich, Pixel und Textmarker, jeweils ein Schritt zum Widerrufen', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page } = handle;
+    const at = await pageSpace(page);
+    const strokes = page.getByTestId('annotation-overlay-0').locator('polyline');
+    // Waagerechter Strich mit dem Stift
+    await page.getByTestId('tool-ink').click();
+    await drag(page, at(100, 600), at(400, 600));
+    await expect(cards(page)).toHaveCount(1);
+    const single = await strokes.count();
+
+    // Strich-Radierer: einmal darüber, der ganze Strich ist weg; Widerrufen holt ihn zurück
+    await page.getByTestId('tool-eraser').click();
+    await page.getByTestId('eraser-stroke').click();
+    await drag(page, at(250, 560), at(250, 640));
+    await expect(cards(page)).toHaveCount(0);
+    await page.getByTestId('comment-undo').click();
+    await expect(cards(page)).toHaveCount(1);
+
+    // Pixel-Radierer: quer durch die Mitte teilt den Strich in zwei, der Kommentar bleibt
+    await page.getByTestId('eraser-pixel').click();
+    await drag(page, at(250, 560), at(250, 640));
+    await expect(cards(page)).toHaveCount(1);
+    await expect(strokes).toHaveCount(single * 2);
+    await page.getByTestId('comment-undo').click();
+    await expect(strokes).toHaveCount(single);
+
+    // Textmarker-Radierer lässt deckende Striche stehen
+    await page.getByTestId('eraser-highlighter').click();
+    await drag(page, at(250, 560), at(250, 640));
+    await expect(cards(page)).toHaveCount(1);
+    await handle.close();
+  });
+
   test('verschiebt Kommentare und ändert ihre Größe', async () => {
     const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
     const { page } = handle;

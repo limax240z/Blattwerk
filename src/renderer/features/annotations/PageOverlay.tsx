@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as R
 import { useTranslation } from 'react-i18next';
 import type { Annotation, FreeTextAnnotation, InkAnnotation, MarkupAnnotation, Point, Quad, Rect } from '../../../shared/annotations';
 import { boundsOf, normalizeRect } from '../../../shared/annotations';
+import { ERASER_RADIUS_PX, erasePaths, pathsTouch, quadsTouch } from '../../../shared/eraser';
 import { CUSTOM_STAMP_COLORS, DRAWING_TOOLS as STORE_DRAWING_TOOLS, useAnnotations, type Tool } from '../../state/annotations-store';
 import { i18n } from '../../i18n';
 import { useUi } from '../../state/ui-store';
@@ -11,6 +12,7 @@ import { AnnotationShape, css } from './AnnotationShape';
 import { needsAppearance } from './changes';
 import {
   addAnnotation,
+  applyErase,
   baseFields,
   deleteAnnotation,
   setContents,
@@ -30,7 +32,7 @@ import {
   SHAPE_SIZE,
   simplifyPath,
 } from './create';
-import { dragRect, isMovable, isResizable, lineRect, quadsFromRects, rectOfQuads, resizeFrom, translate } from './geometry';
+import { dragRect, inkRect, isMovable, isResizable, lineRect, quadsFromRects, rectOfQuads, resizeFrom, translate } from './geometry';
 import { caretAt, rangeBetween, type Caret } from './text-caret';
 import { rangeTextRects } from './text-selection';
 import styles from './PageOverlay.module.css';
@@ -45,7 +47,15 @@ type Gesture =
   | { kind: 'resize'; id: string; fixed: Point; to: Point }
   | { kind: 'endpoint'; id: string; which: 'start' | 'end'; to: Point }
   // Anfang oder Ende einer Textmarkierung ziehen: das andere Ende bleibt fest, die Markierung folgt dem Text
-  | { kind: 'markup'; id: string; fixed: Caret; quads: Quad[] | null };
+  | { kind: 'markup'; id: string; fixed: Caret; quads: Quad[] | null }
+  // Radierer: letzte Lage und bisheriges Ergebnis je Kommentar (null = ganz entfernt)
+  | EraseGesture;
+
+interface EraseGesture {
+  kind: 'erase';
+  last: Point;
+  changes: Record<string, Annotation | null>;
+}
 
 // Freihandstriche, die kurz nacheinander entstehen, bilden eine Zeichnung (wie Handschrift).
 const INK_MERGE_MS = 1500;
@@ -67,6 +77,7 @@ function corners([l, b, r, t]: Rect): Point[] {
 
 // Aktuelle Vorschau eines Kommentars während einer Mausaktion
 function preview(a: Annotation, gesture: Gesture | null): Annotation {
+  if (gesture?.kind === 'erase') return gesture.changes[a.id] ?? a;
   if (!gesture || !('id' in gesture) || gesture.id !== a.id) return a;
   switch (gesture.kind) {
     case 'move':
@@ -190,6 +201,34 @@ export function PageOverlay({
 
   const store = useAnnotations.getState;
 
+  // Radierer von from nach to: Pixel-Radierer kürzt Freihandstriche, Strich-Radierer entfernt berührte Striche,
+  // Textmarker-Radierer nur durchscheinende Striche und Hervorhebungen. Größe in Bildschirmpunkten, unabhängig vom Zoom.
+  const eraseStep = (current: EraseGesture, from: Point, to: Point): EraseGesture => {
+    const { eraser } = store();
+    const radius = pxToUnits(ERASER_RADIUS_PX[eraser.size], scale);
+    let changes = current.changes;
+    const change = (id: string, next: Annotation | null) => {
+      if (changes === current.changes) changes = { ...changes };
+      changes[id] = next;
+    };
+    for (const original of items) {
+      const a = original.id in changes ? changes[original.id] : original;
+      if (!a) continue;
+      if (a.kind === 'ink') {
+        const reach = radius + a.width / 2;
+        if (eraser.mode === 'pixel') {
+          const paths = erasePaths(a.paths, from, to, reach);
+          if (paths) change(a.id, paths.length > 0 ? { ...a, paths, rect: inkRect(paths, a.width) } : null);
+        } else if ((eraser.mode === 'stroke' || a.opacity < 1) && pathsTouch(a.paths, from, to, reach)) {
+          change(a.id, null);
+        }
+      } else if (eraser.mode === 'highlighter' && a.kind === 'highlight' && quadsTouch(a.quads, from, to, radius)) {
+        change(a.id, null);
+      }
+    }
+    return { ...current, last: to, changes };
+  };
+
   // Neuen Kommentar mit einem Zeichenwerkzeug beginnen
   const onBackgroundPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
     if (!drawing || event.button !== 0) return;
@@ -220,6 +259,10 @@ export function PageOverlay({
       case 'ink':
         capture(event);
         setGesture({ kind: 'ink', points: [at] });
+        return;
+      case 'eraser':
+        capture(event);
+        setGesture(eraseStep({ kind: 'erase', last: at, changes: {} }, at, at));
         return;
       case 'line':
       case 'arrow':
@@ -336,6 +379,13 @@ export function PageOverlay({
         scheduleGesture({ ...current, points: [...current.points, ...added] });
         return;
       }
+      case 'erase': {
+        const coalesced = event.nativeEvent.getCoalescedEvents?.() ?? [];
+        let next = current;
+        for (const point of coalesced.length > 0 ? coalesced.map((e) => toPdf(e)) : [at]) next = eraseStep(next, next.last, point);
+        scheduleGesture(next);
+        return;
+      }
       case 'line':
       case 'rect':
         scheduleGesture({ ...current, to: at });
@@ -380,6 +430,9 @@ export function PageOverlay({
         lastInk.set(tabId, { id: ink.id, pageIndex, time: now });
         return;
       }
+      case 'erase':
+        applyErase(tabId, current.changes);
+        return;
       case 'line':
         addAnnotation(tabId, createLine(baseFields(pageIndex), current.tool, current.from, current.to, colors[current.tool], width));
         store().setTool('select');
@@ -426,7 +479,7 @@ export function PageOverlay({
   };
 
   // Gerade erstelltes Werkzeug-Rechteck/Linie/Strich als Vorschau
-  const draft = gesture ? draftShape(gesture, geometry, store()) : null;
+  const draft = gesture ? draftShape(gesture, geometry, store(), scale) : null;
   const handleSize = pxToUnits(8, scale);
   const hitWidth = pxToUnits(10, scale);
 
@@ -456,6 +509,7 @@ export function PageOverlay({
       data-annotation-overlay={pageIndex}
     >
       {items.map((original) => {
+        if (gesture?.kind === 'erase' && gesture.changes[original.id] === null) return null;
         const a = preview(original, gesture);
         const fromFile = original.ref ? originals[original.id] : undefined;
         // Unveränderte vorhandene Kommentare zeichnet pdf.js selbst; hier nur die Klickfläche.
@@ -509,9 +563,14 @@ function openCommentsPanel(tabId: string): void {
   useDocuments.getState().updateTab(tabId, { sidebarTab: 'comments' });
 }
 
-function draftShape(gesture: Gesture, geometry: PageGeometry, settings: ReturnType<typeof useAnnotations.getState>) {
+function draftShape(gesture: Gesture, geometry: PageGeometry, settings: ReturnType<typeof useAnnotations.getState>, scale: number) {
   const { colors, width } = settings;
   switch (gesture.kind) {
+    case 'erase': {
+      // Kreis in der Größe des Radierers unter dem Finger bzw. Zeiger
+      const [cx, cy] = geometry.toView(gesture.last);
+      return <circle cx={cx} cy={cy} r={pxToUnits(ERASER_RADIUS_PX[settings.eraser.size], scale)} fill="rgba(128, 128, 128, 0.15)" stroke="rgba(80, 80, 80, 0.7)" strokeWidth={1} vectorEffect="non-scaling-stroke" />;
+    }
     case 'ink':
       return (
         <polyline

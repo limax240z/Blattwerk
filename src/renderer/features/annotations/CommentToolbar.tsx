@@ -1,12 +1,14 @@
 import {
   Ban,
   Circle,
+  Eraser,
   Highlighter,
   Minus,
   MousePointer2,
   MoveUpRight,
   PenLine,
   Redo2,
+  Spline,
   Square,
   Stamp,
   StickyNote,
@@ -22,6 +24,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, Rgb, StampId } from '../../../shared/annotations';
 import { STAMP_IDS } from '../../../shared/annotations';
+import { ERASER_MODES, ERASER_SIZES, type EraserMode, type EraserSize } from '../../../shared/eraser';
 import { IconButton } from '../../components/IconButton';
 import { ColorPicker } from '../../components/ColorPicker';
 import { ModeBadge } from '../../components/ModeBadge';
@@ -46,6 +49,7 @@ const TOOLS: Array<{ tool: Tool; icon: LucideIcon }> = [
   { tool: 'note', icon: StickyNote },
   { tool: 'freetext', icon: Type },
   { tool: 'ink', icon: PenLine },
+  { tool: 'eraser', icon: Eraser },
   { tool: 'square', icon: Square },
   { tool: 'circle', icon: Circle },
   { tool: 'line', icon: Minus },
@@ -58,6 +62,8 @@ const FONT_SIZES = [8, 9, 10, 12, 14, 18, 24, 36];
 const WIDTH_KINDS = new Set<Tool>(['ink', 'square', 'circle', 'line', 'arrow']);
 const FILL_KINDS = new Set<Tool>(['square', 'circle']);
 const OPACITIES = [1, 0.75, 0.5, 0.25];
+// Arten des Radierers (wie in GoodNotes)
+const ERASER_ICONS: Record<EraserMode, LucideIcon> = { pixel: Eraser, stroke: Spline, highlighter: Highlighter };
 
 export function CommentToolbar({ tab }: { tab: TabState }) {
   const { t } = useTranslation();
@@ -69,6 +75,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const fontSize = useAnnotations((s) => s.fontSize);
   const stamp = useAnnotations((s) => s.stamp);
   const customText = useAnnotations((s) => s.customStamp.text);
+  const eraser = useAnnotations((s) => s.eraser);
   const selected: Annotation | undefined = annotations?.items.find((a) => a.id === annotations.selectedId);
   const readOnly = !tab.canAnnotate;
 
@@ -77,7 +84,8 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const currentColor = selected ? selected.color : target ? colors[target] : null;
   const currentWidth = selected && 'width' in selected ? selected.width : width;
   const currentFontSize = selected?.kind === 'freetext' ? selected.fontSize : fontSize;
-  const showColor = target !== null && target !== 'stamp' && target !== 'signature' && !readOnly;
+  const showColor = target !== null && target !== 'stamp' && target !== 'signature' && target !== 'eraser' && !readOnly;
+  const showEraser = tool === 'eraser' && !selected && !readOnly;
   const showWidth = target !== null && WIDTH_KINDS.has(target) && !readOnly;
   const showFontSize = target === 'freetext' && !readOnly;
   const opacity = useAnnotations((s) => s.opacity);
@@ -176,7 +184,38 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
         ))}
       </div>
 
-      {(showColor || showWidth || showFontSize || showFill || (tool === 'stamp' && !readOnly)) && <span className={styles.separator} />}
+      {(showColor || showWidth || showFontSize || showFill || showEraser || (tool === 'stamp' && !readOnly)) && <span className={styles.separator} />}
+
+      {showEraser && (
+        <>
+          <div className={styles.group}>
+            {ERASER_MODES.map((mode) => (
+              <IconButton
+                key={mode}
+                icon={ERASER_ICONS[mode]}
+                label={t(`comments.eraser.mode.${mode}`)}
+                pressed={eraser.mode === mode}
+                onClick={() => useAnnotations.getState().setEraser({ ...eraser, mode })}
+                data-testid={`eraser-${mode}`}
+              />
+            ))}
+          </div>
+          <select
+            className={styles.select}
+            aria-label={t('comments.eraser.size')}
+            data-tooltip={t('comments.eraser.size')}
+            value={eraser.size}
+            onChange={(event) => useAnnotations.getState().setEraser({ ...eraser, size: event.target.value as EraserSize })}
+            data-testid="eraser-size"
+          >
+            {ERASER_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {t(`comments.eraser.sizes.${size}`)}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
 
       {showColor && (
         <ColorPicker
