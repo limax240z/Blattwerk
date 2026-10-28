@@ -48,7 +48,7 @@ final class WebViewController: UIViewController {
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isOpaque = false
-        webView.backgroundColor = .systemBackground
+        webView.backgroundColor = Self.windowColor
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.bounces = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
@@ -61,11 +61,12 @@ final class WebViewController: UIViewController {
         self.webView = webView
 
         let root = UIView()
-        root.backgroundColor = .systemBackground
+        root.backgroundColor = Self.windowColor
         root.addSubview(webView)
         webView.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            webView.topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor),
+            // Bis an alle Ränder; Statusleiste und Home-Balken hält die Oberfläche selbst frei (env(safe-area-inset-*))
+            webView.topAnchor.constraint(equalTo: root.topAnchor),
             webView.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             webView.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: root.trailingAnchor),
@@ -80,4 +81,11 @@ final class WebViewController: UIViewController {
     }
 
     override var prefersHomeIndicatorAutoHidden: Bool { true }
+
+    // Fensterhintergrund der Oberfläche (--color-bg in tokens.css), hell und dunkel; sichtbar, bis die Seite gezeichnet ist
+    static let windowColor = UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0x1c / 255, green: 0x1d / 255, blue: 0x1a / 255, alpha: 1)
+            : UIColor(red: 0xf3 / 255, green: 0xef / 255, blue: 0xe6 / 255, alpha: 1)
+    }
 }
