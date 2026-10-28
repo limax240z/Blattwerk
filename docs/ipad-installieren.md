@@ -26,6 +26,18 @@ Klemmt etwas, hilft die offizielle Anleitung: <https://docs.sidestore.io/docs/in
 
 ## Blattwerk installieren
 
+### Mit iloader vom Mac (so läuft es zurzeit)
+
+Seit Mitte Oktober 2026 lehnt Apple die Anmeldung in SideStore oft mit dem Fehler **-80045** ab ([SideStore #1652](https://github.com/SideStore/SideStore/issues/1652)). iloader auf dem Mac meldet sich dagegen erfolgreich an (Anisette-Server „Jkcoxson (Mac)“). Bis SideStore das behebt, kommt Blattwerk deshalb so aufs iPad:
+
+1. iPad per Kabel an den Mac, iloader öffnen, angemeldet bleiben, iPad auswählen.
+2. Unter „Installers“ auf **„Import IPA“** klicken und `release/Blattwerk-0.17.0-iPad.ipa` wählen.
+3. Warten, bis iloader fertig meldet.
+
+**Verlängern:** Dasselbe alle 7 Tage wiederholen (vor Ablauf). Die Daten in Blattwerk bleiben dabei erhalten. Bei mehrmaligen Fehlversuchen in SideStore nicht weiter probieren, sonst sperrt Apple die Anmeldung für eine Weile.
+
+### Mit SideStore (sobald die Anmeldung dort wieder geht)
+
 1. Auf dem Mac liegt die App im Projektordner unter `release/`, zum Beispiel `Blattwerk-0.17.0-iPad.ipa`.
 2. Schick die Datei per **AirDrop** an das iPad. Sie landet in der Dateien-App unter „Downloads“.
 3. Verbinde LocalDevVPN, öffne SideStore, tippe unter „My Apps“ oben auf **„+“** und wähle die `.ipa`-Datei.

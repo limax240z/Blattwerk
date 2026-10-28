@@ -22,19 +22,7 @@ final class AppHost: NSObject {
     func call(_ method: String, _ args: [String: Any], reply: @escaping (Result<Any?, BridgeError>) -> Void) {
         switch method {
         case "log":
-            let text = args["text"] as? String ?? ""
-            NSLog("[Blattwerk] %@", text)
-            #if DEBUG
-            // Entwicklung: zusätzlich in Library/Caches/oberflaeche.log (simctl get_app_container … data)
-            let log = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("oberflaeche.log")
-            if let handle = try? FileHandle(forWritingTo: log) {
-                handle.seekToEndOfFile()
-                handle.write(Data((text + "\n").utf8))
-                try? handle.close()
-            } else {
-                try? Data((text + "\n").utf8).write(to: log)
-            }
-            #endif
+            DebugLog.write(args["text"] as? String ?? "")
             reply(.success(nil))
         case "ready":
             ready = true
@@ -415,5 +403,23 @@ final class PickerDelegate: NSObject, UIDocumentPickerDelegate {
         guard !finished else { return }
         finished = true
         done(urls)
+    }
+}
+
+// Meldungen für die Entwicklung: Systemprotokoll, in Debug-Builds zusätzlich Library/Caches/oberflaeche.log
+// (scripts/run-ios-sim.sh gibt die Datei aus)
+enum DebugLog {
+    static func write(_ text: String) {
+        NSLog("[Blattwerk] %@", text)
+        #if DEBUG
+        let log = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0].appendingPathComponent("oberflaeche.log")
+        if let handle = try? FileHandle(forWritingTo: log) {
+            handle.seekToEndOfFile()
+            handle.write(Data((text + "\n").utf8))
+            try? handle.close()
+        } else {
+            try? Data((text + "\n").utf8).write(to: log)
+        }
+        #endif
     }
 }

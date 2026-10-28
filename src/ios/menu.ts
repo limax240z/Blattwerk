@@ -11,8 +11,9 @@ export interface NativeMenuItem {
   id?: string;
   title?: string;
   separator?: true;
-  // window: Einträge in das Fenster-Menü des Systems übernehmen
-  system?: 'window';
+  // window: Einträge in das Fenster-Menü des Systems übernehmen; about, preferences: ersetzen „Über …“ und
+  // „Einstellungen …“ im App-Menü (iPadOS vergibt ⌘, dort selbst und lehnt doppelte Kürzel ab)
+  system?: 'window' | 'about' | 'preferences';
   role?: 'cut' | 'copy' | 'paste' | 'selectAll';
   enabled?: boolean;
   checked?: boolean;
@@ -22,6 +23,7 @@ export interface NativeMenuItem {
 }
 
 const ROLES = new Set(['cut', 'copy', 'paste', 'selectAll']);
+const APP_MENU_ITEMS: Record<string, 'about' | 'preferences'> = { 'help.about': 'about', 'app.settings': 'preferences' };
 
 export class IpadMenu {
   #actions = new Map<string, () => void>();
@@ -62,6 +64,7 @@ export class IpadMenu {
       enabled: item.enabled !== false,
       ...(item.type === 'checkbox' || item.type === 'radio' ? { checked: item.checked === true } : {}),
       ...(key ? { key } : {}),
+      ...(item.id && APP_MENU_ITEMS[item.id] ? { system: APP_MENU_ITEMS[item.id] } : {}),
     };
   }
 }

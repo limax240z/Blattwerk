@@ -11,10 +11,22 @@ final class MenuBar {
     private var enabled: [String: Bool] = [:]
     private var checked: [String: Bool] = [:]
     private var onCommand: ((String) -> Void)?
+    private static let cacheKey = "menuBar.menus"
+
+    // Menüs vom letzten Start: iPadOS baut die Leiste oft schon, bevor die Oberfläche geladen ist
+    private init() {
+        if let data = UserDefaults.standard.data(forKey: Self.cacheKey),
+           let cached = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] {
+            menus = cached
+            structure = Self.signature(cached)
+            collectState(cached)
+        }
+    }
 
     func update(menus: [[String: Any]], onCommand: @escaping (String) -> Void) {
         self.onCommand = onCommand
         self.menus = menus
+        if let data = try? JSONSerialization.data(withJSONObject: menus) { UserDefaults.standard.set(data, forKey: Self.cacheKey) }
         enabled = [:]
         checked = [:]
         collectState(menus)
@@ -22,9 +34,30 @@ final class MenuBar {
         let next = Self.signature(menus)
         if next != structure {
             structure = next
-            UIMenuSystem.main.setNeedsRebuild()
+            // Ab iPadOS 26 baut erst eine neu gesetzte Konfiguration das Menü sicher neu (setNeedsRebuild allein nicht)
+            if #available(iOS 26.0, *) { Self.configure() } else { Self.system.setNeedsRebuild() }
         } else {
-            UIMenuSystem.main.setNeedsRevalidate()
+            Self.system.setNeedsRevalidate()
+        }
+    }
+
+    // Ab iPadOS 26 gilt das Hauptmenü von UIMainMenuSystem; UIMenuSystem.main baut dort nach dem Start nicht mehr neu
+    private static var system: UIMenuSystem {
+        if #available(iOS 26.0, *) { return UIMainMenuSystem.shared }
+        return .main
+    }
+
+    // Ab iPadOS 26 beim Start aufrufen: eigener Aufbau statt buildMenu(with:), ohne die Dokument-, Druck- und
+    // Suchbefehle des Systems (Blattwerk bringt eigene mit)
+    static func configure() {
+        guard #available(iOS 26.0, *) else { return }
+        let configuration = UIMainMenuSystem.Configuration()
+        configuration.newScenePreference = .removed
+        configuration.documentPreference = .removed
+        configuration.printingPreference = .removed
+        configuration.findingPreference = .removed
+        UIMainMenuSystem.shared.setBuildConfiguration(configuration) { builder in
+            MenuBar.shared.build(into: builder)
         }
     }
 
@@ -32,6 +65,11 @@ final class MenuBar {
         guard !menus.isEmpty else { return }
         for identifier: UIMenu.Identifier in [.file, .edit, .format, .view] {
             builder.remove(menu: identifier)
+        }
+        // „Über …“ und „Einstellungen …“ (⌘,) gehören ins App-Menü an die Stelle der Einträge des Systems
+        for place in ["about", "preferences"] {
+            guard let item = Self.find(system: place, in: menus), let element = makeElement(item, ignoringPlace: true) else { continue }
+            builder.replace(menu: place == "about" ? .about : .preferences, with: UIMenu(title: "", options: .displayInline, children: [element]))
         }
         var previous: UIMenu.Identifier = .application
         for (index, item) in menus.enumerated() {
@@ -70,14 +108,16 @@ final class MenuBar {
                 groups.append([])
                 continue
             }
-            if let element = makeElement(item) { groups[groups.count - 1].append(element) }
+            if let element = makeElement(item, ignoringPlace: false) { groups[groups.count - 1].append(element) }
         }
         let filled = groups.filter { !$0.isEmpty }
         if filled.count <= 1 { return filled.first ?? [] }
         return filled.map { UIMenu(title: "", options: .displayInline, children: $0) }
     }
 
-    private func makeElement(_ item: [String: Any]) -> UIMenuElement? {
+    // Einträge mit eigenem Platz im App-Menü (system: about, preferences) erscheinen nur dort
+    private func makeElement(_ item: [String: Any], ignoringPlace: Bool) -> UIMenuElement? {
+        if !ignoringPlace, let place = item["system"] as? String, place == "about" || place == "preferences" { return nil }
         if let role = item["role"] as? String {
             let title = item["title"] as? String ?? ""
             switch role {
@@ -101,6 +141,14 @@ final class MenuBar {
             return command
         }
         return UICommand(title: title, action: action, propertyList: id)
+    }
+
+    private static func find(system place: String, in items: [[String: Any]]) -> [String: Any]? {
+        for item in items {
+            if item["system"] as? String == place, item["id"] != nil { return item }
+            if let children = item["children"] as? [[String: Any]], let found = find(system: place, in: children) { return found }
+        }
+        return nil
     }
 
     private func collectState(_ items: [[String: Any]]) {
