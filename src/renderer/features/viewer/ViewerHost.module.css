@@ -7,6 +7,11 @@
   background: var(--color-viewer-bg);
 }
 
+/* iPad und iPhone: die letzte Seite lässt sich über den Home-Balken hinaus scrollen */
+:global([data-platform='ipad']) .container :global(.pdfViewer) {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* Formular bearbeiten: Eingabefelder und Links von pdf.js nicht bedienbar */
 .container[data-form-editing] :global(.annotationLayer),
 .container[data-form-editing] :global(.annotationLayer *) {

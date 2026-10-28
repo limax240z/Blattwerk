@@ -13,6 +13,11 @@
   padding: 5vh 0 40px;
 }
 
+/* iPad und iPhone: unten Platz für den Home-Balken (die Seite läuft darunter weiter) */
+:global([data-platform='ipad']) .inner {
+  padding-bottom: calc(40px + env(safe-area-inset-bottom));
+}
+
 /* Über den offenen Dokumenten (Home-Knopf): deckt den Arbeitsbereich ab, die Dokumente bleiben darunter geladen */
 .overlay {
   position: absolute;

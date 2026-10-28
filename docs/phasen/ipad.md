@@ -58,3 +58,9 @@ Geprüft im iPhone-Simulator (iPhone 18 Pro): Start, Startseite, Dokument öffne
 Dabei behoben, auch für das iPad: Zeichnen mit dem Finger scrollte die Seite, statt zu malen. Dialoge waren durchsichtig.
 
 Noch nicht geprüft: auf einem echten iPhone, Querformat mit Notch, Bildschirmtastatur bei Textfeldern.
+
+## Rückmeldungen vom echten iPhone (2026-10-28)
+
+- Oben blieb hinter der Statusleiste ein schwarzer Streifen, unten wurden Inhalte an einem festen Rand abgeschnitten. Jetzt reicht die Oberfläche bis an alle Ränder.
+- Vorlagen öffneten als leere Datei: Auf dem Gerät liefert WebKit größere Daten als Strom, der zu früh als leer galt. Das hätte auch beim Speichern eine Datei leeren können. Behoben, und die Hülle schreibt nur noch, wenn genau so viele Bytes ankommen, wie die Oberfläche geschickt hat.
+- Beim Malen zeichnete jeder Finger: Jetzt malt ein Finger, zwei Finger schieben.

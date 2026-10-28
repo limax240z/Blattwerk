@@ -11,11 +11,12 @@ body,
   margin: 0;
 }
 
-/* iPad und iPhone (ADR 0029/0030): Die Hülle hält oben den sicheren Rand frei; seitlich (Notch quer) und unten
-   (Home-Balken) übernimmt das die Oberfläche */
+/* iPad und iPhone (ADR 0029/0030): Die Oberfläche reicht bis an alle Ränder. Oben (Statusleiste) und seitlich (Notch
+   quer) bleibt der sichere Rand frei, in der Farbe des Fensters; unten läuft der Inhalt unter dem Home-Balken weiter
+   (Startseite und Dokumente lassen dort Platz zum Scrollen) */
 [data-platform='ipad'] #root {
   box-sizing: border-box;
-  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
 }
 
 body {

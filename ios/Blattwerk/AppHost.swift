@@ -159,7 +159,7 @@ final class AppHost: NSObject {
                 return .notFound
             }
         case ("save", "PUT"):
-            guard let data = request.body else { return .error(400, "no-body") }
+            guard let data = request.completeBody else { return .error(400, "incomplete-body") }
             guard let file = files.get(rest) else { return .json(["ok": false, "error": "unknown-file"]) }
             if request.query["force"] != "1", !files.isUnchanged(file) { return .json(["ok": false, "error": "changed-externally"]) }
             do {
@@ -169,7 +169,7 @@ final class AppHost: NSObject {
                 return .json(["ok": false, "error": "write-failed", "detail": String(describing: error)])
             }
         case ("stage", "PUT"):
-            guard let data = request.body else { return .error(400, "no-body") }
+            guard let data = request.completeBody else { return .error(400, "incomplete-body") }
             do {
                 let url = try Staging.write(data, name: request.query["name"] ?? "Dokument.pdf")
                 if request.query["open"] == "1" {
@@ -181,7 +181,7 @@ final class AppHost: NSObject {
                 return .error(500, String(describing: error))
             }
         case ("folder", "PUT"):
-            guard let data = request.body else { return .error(400, "no-body") }
+            guard let data = request.completeBody else { return .error(400, "incomplete-body") }
             guard let folder = files.get(rest) else { return .json(["ok": false, "error": "unknown-folder"]) }
             do {
                 let name = try writeUnique(data, name: Staging.safeName(request.query["name"] ?? "Datei"), in: folder.url)
@@ -193,7 +193,7 @@ final class AppHost: NSObject {
             guard let data = Storage.read(rest) else { return .notFound }
             return .bytes(data)
         case ("store", "PUT"):
-            guard let data = request.body else { return .error(400, "no-body") }
+            guard let data = request.completeBody else { return .error(400, "incomplete-body") }
             do {
                 try Storage.write(rest, data)
                 return .json(true)
