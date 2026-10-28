@@ -5,6 +5,7 @@ import UIKit
 final class AppDelegate: UIResponder, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         Staging.removeLeftovers()
+        MenuBar.configure()
         return true
     }
 
@@ -14,10 +15,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         return configuration
     }
 
-    // Menüleiste von iPadOS: Inhalt kommt aus der Oberfläche (MenuBar.swift)
+    // Menüleiste bis iPadOS 18: Inhalt kommt aus der Oberfläche (MenuBar.swift); ab iPadOS 26 baut MenuBar.configure
     override func buildMenu(with builder: UIMenuBuilder) {
         super.buildMenu(with: builder)
-        guard builder.system == .main else { return }
+        guard #unavailable(iOS 26.0), builder.system == .main else { return }
         MenuBar.shared.build(into: builder)
     }
 

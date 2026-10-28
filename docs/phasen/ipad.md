@@ -25,11 +25,17 @@ Fürs iPad neu:
 - Sicherer Kontext (WebCrypto für Signaturen), OffscreenCanvas, Worker von pdf.js, PDFium und Tesseract.
 - Unit-Tests für Tastenkürzel, das iPad-Menü und das leere Dokument. Typprüfung, Lint, `npm test` und die ganze Oberflächen-Testreihe der Mac-App sind grün.
 
+## Auf dem echten iPad geprüft (iPadOS 27.2, 2026-10-28)
+
+- Installation mit iloader („Import IPA“). Die Anmeldung in SideStore scheitert zurzeit an Apples Fehler -80045.
+- Start, Startseite, Menüleiste mit allen Blattwerk-Menüs, Bedienung mit dem Finger: laut Auftraggeber „geht alles“.
+- Behoben: Die Menüleiste blieb zuerst leer, weil ⌘, schon „Einstellungen“ im App-Menü des Systems belegt. Bei doppelten Kürzeln lehnt iPadOS alle eingefügten Menüs ab.
+
 ## Noch nicht geprüft
 
-- **Bedienung mit dem Finger und dem Apple Pencil:** Das Antippen im Simulator brauchte eine Freigabe, die während der Arbeit nicht erteilt war. Getestet wurde deshalb mit Skripten in der Oberfläche statt mit echten Berührungen.
+- Apple Pencil im Einzelnen (Freihand, Unterschrift).
 - Die Dialoge der Dateien-App (Öffnen, Sichern unter, Ordner wählen) und Drucken. Der Code nutzt die Standardwege von iPadOS, ausprobiert wurden sie noch nicht.
-- Installation über SideStore auf einem echten iPad.
+- Verlängern nach 7 Tagen über iloader.
 
 ## Bekannte Grenzen
 
