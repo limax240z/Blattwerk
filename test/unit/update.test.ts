@@ -6,6 +6,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { INSTALL_SCRIPT } from '../../src/main/update/install-script';
 import { fetchChecked } from '../../src/main/update/online';
+import { MIN_GAP_MS, PERIOD_MS, RETURN_AWAY_MS, shouldCheck } from '../../src/main/update/schedule';
 import { compareVersions, isAllowedUpdateUrl, parseRelease, plistString, updateAssetName } from '../../src/shared/update';
 
 const dirs: string[] = [];
@@ -109,5 +110,36 @@ describe('Updates aus dem Netz (ADR 0027)', () => {
     expect(await ok.text()).toBe('ok');
     expect(calls).toEqual(['https://github.com/a/b/releases/download/v1/x.zip', 'https://objects.githubusercontent.com/x']);
     await expect(fetchChecked('https://github.com/a/b/releases/download/v1/x.zip', {}, fake('https://evil.example/x'))).rejects.toThrow();
+  });
+});
+
+describe('Wann nach Updates gesucht wird', () => {
+  const now = 1_000_000_000;
+
+  it('beim Start, außer das geöffnete Dokument hat die Suche gerade ausgelöst', () => {
+    expect(shouldCheck('start', { now, last: null })).toBe(true);
+    expect(shouldCheck('start', { now, last: now - 1000 })).toBe(false);
+  });
+
+  it('bei jedem neuen Dokument, aber nicht mehrmals kurz hintereinander', () => {
+    expect(shouldCheck('document', { now, last: null })).toBe(true);
+    expect(shouldCheck('document', { now, last: now - MIN_GAP_MS })).toBe(true);
+    expect(shouldCheck('document', { now, last: now - MIN_GAP_MS + 1 })).toBe(false);
+  });
+
+  it('bei der Rückkehr nur nach einiger Zeit im Hintergrund', () => {
+    const last = now - PERIOD_MS;
+    expect(shouldCheck('return', { now, last, awaySince: now - RETURN_AWAY_MS })).toBe(true);
+    expect(shouldCheck('return', { now, last, awaySince: now - RETURN_AWAY_MS + 1 })).toBe(false);
+    expect(shouldCheck('return', { now, last, awaySince: null })).toBe(false);
+    expect(shouldCheck('return', { now, last: null, awaySince: now - 1000 })).toBe(false);
+    // Gerade erst gesucht: Die Rückkehr löst nichts aus
+    expect(shouldCheck('return', { now, last: now - 1000, awaySince: now - RETURN_AWAY_MS })).toBe(false);
+  });
+
+  it('alle paar Stunden, auch wenn der Rechner dazwischen geschlafen hat', () => {
+    expect(shouldCheck('timer', { now, last: now - PERIOD_MS + 1 })).toBe(false);
+    expect(shouldCheck('timer', { now, last: now - PERIOD_MS })).toBe(true);
+    expect(shouldCheck('timer', { now, last: now - 20 * PERIOD_MS })).toBe(true);
   });
 });

@@ -43,6 +43,15 @@ gehen. Ergänzt [0025](0025-updates.md), das neue Versionen nur aus einem Ordner
 - **Ohne Quarantäne:** Vom Hauptprozess geladene Dateien tragen unter macOS kein Quarantäne-Attribut; die Meldung
   „beschädigt“ wie beim Herunterladen im Browser entfällt.
 
+## Nachtrag 2026-11-04: Wann gesucht wird
+
+Bisher nur einmal beim Start. Auf Wunsch des Auftraggebers still im Hintergrund (`src/main/update/schedule.ts`): bei
+jedem Start, bei jedem neuen Dokument, bei der Rückkehr in die App nach mindestens 10 Minuten im Hintergrund und
+spätestens alle 3 Stunden. Zwischen zwei Suchen liegen mindestens 2 Minuten, weil GitHub ohne Anmeldung nur 60 Anfragen
+je Stunde und Internetanschluss erlaubt. Der Zeitgeber prüft alle 5 Minuten, ob die Zeit um ist, damit die Suche nach
+dem Ruhezustand nicht ausfällt. Weggeklickte Hinweise bleiben für diese Version weg (`dismissed`); nur die Suche von
+Hand zeigt sie wieder.
+
 ## Verworfen
 
 - **Privates Projekt direkt:** Releases privater Projekte gibt GitHub nur mit Zugangsdaten heraus.
