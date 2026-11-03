@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { Annotation } from '../../../shared/annotations';
+import type { Annotation, Point } from '../../../shared/annotations';
 import { getRuntime } from '../../engine/runtime';
 import { MARKUP_TOOLS, useAnnotations, useTabAnnotations, type Tool } from '../../state/annotations-store';
 import { useDocuments } from '../../state/documents-store';
@@ -13,7 +13,9 @@ import { useContentEditInput } from '../content-edit/hooks';
 import { FormEditOverlay } from '../form-edit/FormEditOverlay';
 import { useFormEditInput } from '../form-edit/hooks';
 import { addAnnotation, baseFields, hideDomAnnotations, updateAnnotation } from './controller';
-import { createMarkup, createRedaction } from './create';
+import { css } from './AnnotationShape';
+import { createInk, createMarkup, createRedaction, MARKER_OPACITY, MARKER_WIDTH, simplifyPath } from './create';
+import { useLiveText } from '../live-text/useLiveText';
 import { isMovable, quadsFromRects, translate } from './geometry';
 import styles from './PageOverlay.module.css';
 import { PageOverlay } from './PageOverlay';
@@ -79,6 +81,61 @@ function markupAt(tabId: string, container: HTMLElement, clientX: number, client
     return hit?.id ?? null;
   }
   return null;
+}
+
+// Zug mit dem Hervorheben-Werkzeug. Findet sich darunter kein Text (Bild, Handschrift, Text noch nicht erkannt), wird
+// die Zugbahn ein durchscheinender Freihandstrich in der Farbe der Hervorhebung (wie ein echter Textmarker).
+interface MarkerTrace {
+  pageIndex: number;
+  points: Point[];
+  // zurückgelegter Weg in Bildschirmpixeln (kurze Klicks sind keine Striche)
+  distance: number;
+  last: { x: number; y: number };
+  preview: SVGSVGElement | null;
+}
+
+const MARKER_MIN_DISTANCE_PX = 12;
+
+function pointOnPage(tabId: string, container: HTMLElement, pageIndex: number, clientX: number, clientY: number): Point | null {
+  const svg = container.querySelector<SVGSVGElement>(`[data-annotation-overlay="${pageIndex}"]`);
+  const geometry = cachedGeometry(tabId, pageIndex);
+  const box = svg?.getBoundingClientRect();
+  if (!svg || !geometry || !box || box.width === 0) return null;
+  return geometry.toPdf(((clientX - box.left) / box.width) * geometry.width, ((clientY - box.top) / box.height) * geometry.height);
+}
+
+function pageAt(container: HTMLElement, clientX: number, clientY: number): number | null {
+  for (const svg of container.querySelectorAll<SVGSVGElement>('[data-annotation-overlay]')) {
+    const box = svg.getBoundingClientRect();
+    if (clientX >= box.left && clientX <= box.right && clientY >= box.top && clientY <= box.bottom) return Number(svg.dataset.annotationOverlay);
+  }
+  return null;
+}
+
+// Vorschau des Strichs während des Ziehens (eigenes SVG neben der Kommentarebene, nur solange gezogen wird)
+function showMarkerPreview(tabId: string, container: HTMLElement, trace: MarkerTrace, visible: boolean): void {
+  const geometry = cachedGeometry(tabId, trace.pageIndex);
+  const host = container.querySelector(`[data-annotation-overlay="${trace.pageIndex}"]`)?.parentElement;
+  if (!geometry || !host) return;
+  if (!trace.preview) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${geometry.width} ${geometry.height}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('style', 'position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none');
+    const line = document.createElementNS(ns, 'polyline');
+    line.setAttribute('fill', 'none');
+    line.setAttribute('stroke', css(useAnnotations.getState().colors.highlight));
+    line.setAttribute('stroke-width', String(MARKER_WIDTH));
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('stroke-linejoin', 'round');
+    line.setAttribute('opacity', String(MARKER_OPACITY));
+    svg.append(line);
+    host.append(svg);
+    trace.preview = svg;
+  }
+  trace.preview.style.display = visible ? '' : 'none';
+  trace.preview.firstElementChild?.setAttribute('points', trace.points.map((p) => geometry.toView(p).join(',')).join(' '));
 }
 
 // Seitengeometrie (Maßstab 1, mit Drehung) für Markierungen aus der Textauswahl, auch ohne gerenderte Ebene.
@@ -210,16 +267,53 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
     if (!active || !canAnnotate || !MARKUP_TOOLS.includes(tool)) return;
     const container = getRuntime(tabId)?.container;
     if (!container) return;
+    let trace: MarkerTrace | null = null;
+    const endTrace = () => {
+      trace?.preview?.remove();
+      trace = null;
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      endTrace();
+      if (tool !== 'highlight' || event.button !== 0 || (event.target as Element | null)?.closest('[data-handle]')) return;
+      const pageIndex = pageAt(container, event.clientX, event.clientY);
+      const point = pageIndex === null ? null : pointOnPage(tabId, container, pageIndex, event.clientX, event.clientY);
+      if (pageIndex === null || !point) return;
+      trace = { pageIndex, points: [point], distance: 0, last: { x: event.clientX, y: event.clientY }, preview: null };
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!trace || (event.buttons & 1) === 0) return;
+      const point = pointOnPage(tabId, container, trace.pageIndex, event.clientX, event.clientY);
+      if (!point) return;
+      trace.points.push(point);
+      trace.distance += Math.hypot(event.clientX - trace.last.x, event.clientY - trace.last.y);
+      trace.last = { x: event.clientX, y: event.clientY };
+      // Wird dabei Text ausgewählt, zeigt die Auswahl schon, was markiert wird
+      const selection = window.getSelection();
+      const selecting = !!selection && !selection.isCollapsed && selection.toString().trim() !== '';
+      if (trace.distance >= MARKER_MIN_DISTANCE_PX) showMarkerPreview(tabId, container, trace, !selecting);
+    };
     const onPointerUp = (event: PointerEvent) => {
       // Ziehen an einem Anfasser (der Zeiger bleibt bei ihm) ändert eine Markierung und legt keine neue an
       if ((event.target as Element | null)?.closest('[data-handle]')) {
         window.getSelection()?.removeAllRanges();
+        endTrace();
         return;
       }
       const { clientX, clientY } = event;
+      const drawn = trace;
+      trace = null;
       // Die Auswahl steht erst nach dem Ereignis fest.
       setTimeout(() => {
+        drawn?.preview?.remove();
         if (markupSelection(tabId, tool, (page) => cachedGeometry(tabId, page))) return;
+        if (drawn && drawn.distance >= MARKER_MIN_DISTANCE_PX) {
+          const color = useAnnotations.getState().colors.highlight;
+          const ink = createInk(baseFields(drawn.pageIndex), [simplifyPath(drawn.points)], color, MARKER_WIDTH);
+          addAnnotation(tabId, { ...ink, opacity: MARKER_OPACITY });
+          window.getSelection()?.removeAllRanges();
+          if (useUi.getState().markToolsVisible) useAnnotations.getState().select(tabId, null);
+          return;
+        }
         // Nur geklickt (nichts ausgewählt): eine vorhandene Textmarkierung an dieser Stelle auswählen
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed) return;
@@ -227,8 +321,17 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
         if (hit) useAnnotations.getState().select(tabId, hit);
       }, 0);
     };
+    container.addEventListener('pointerdown', onPointerDown);
+    container.addEventListener('pointermove', onPointerMove);
     container.addEventListener('pointerup', onPointerUp);
-    return () => container.removeEventListener('pointerup', onPointerUp);
+    container.addEventListener('pointercancel', endTrace);
+    return () => {
+      container.removeEventListener('pointerdown', onPointerDown);
+      container.removeEventListener('pointermove', onPointerMove);
+      container.removeEventListener('pointerup', onPointerUp);
+      container.removeEventListener('pointercancel', endTrace);
+      endTrace();
+    };
   }, [active, canAnnotate, tool, tabId, pagesReady]);
 
   // Esc beendet das Werkzeug bzw. die Auswahl; Pfeiltasten verschieben den ausgewählten Kommentar.
@@ -277,6 +380,7 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
     return () => container.removeEventListener('pointerdown', onPointerDown);
   }, [tabId, pagesReady]);
 
+  useLiveText(tabId, visible, geometries, pagesReady);
   useFormEditInput(tabId, active, formEditing, pagesReady);
   useContentEditInput(tabId, active, contentEditing, pagesReady);
 

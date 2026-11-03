@@ -498,6 +498,12 @@
     "color": "Farbe",
     "width": "Linienstärke",
     "widthValue": "{{value}} pt",
+    "lineStyle": {
+      "label": "Linienart",
+      "solid": "Durchgehend",
+      "dotted": "Gepunktet",
+      "dashed": "Gestrichelt"
+    },
     "snapShapes": "Formen erkennen: am Strichende kurz stillhalten macht eine saubere Linie, ein Rechteck oder eine Ellipse",
     "eraser": {
       "mode": {
@@ -1382,7 +1388,7 @@
     "delete": "Markierung löschen",
     "done": "Fertig",
     "notAllowed": "Dieses Dokument erlaubt keine Kommentare und Markierungen.",
-    "hint": "Text auswählen, um ihn zu markieren. Ein Klick auf eine Markierung wählt sie aus.",
+    "hint": "Text auswählen, um ihn zu markieren; auch Text in Bildern und Scans. Wo kein Text ist, malt das Hervorheben wie ein Textmarker. Ein Klick auf eine Markierung wählt sie aus.",
     "selectedHint": "Farbe oder Art wählen, löschen oder an den Enden ziehen, um die Markierung zu kürzen oder zu verlängern."
   },
   "templates": {

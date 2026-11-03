@@ -5,6 +5,7 @@ import type {
   FreeTextAnnotation,
   InkAnnotation,
   LineAnnotation,
+  LineStyle,
   MarkupAnnotation,
   NoteAnnotation,
   Point,
@@ -26,6 +27,9 @@ export const NOTE_SIZE = { width: 20, height: 20 };
 export const FREETEXT_SIZE = { width: 180, height: 40 };
 export const SHAPE_SIZE = { width: 100, height: 60 };
 export const LINE_LENGTH = 100;
+// Freihand-Textmarker (Zug mit dem Hervorheben-Werkzeug, wo kein Text liegt): Breite in Punkt und Deckkraft
+export const MARKER_WIDTH = 12;
+export const MARKER_OPACITY = 0.4;
 export const STAMP_SIZE = { width: 160, height: 48 };
 // Breite einer neu gesetzten Unterschrift (Höhe nach Seitenverhältnis des Bildes, höchstens 80 pt)
 export const SIGNATURE_WIDTH = 180;
@@ -50,8 +54,14 @@ export function createFreeText(base: Base, rect: Rect, color: Rgb, fontSize: num
   return { ...base, kind: 'freetext', rect, color, fontSize };
 }
 
-export function createInk(base: Base, paths: Point[][], color: Rgb, width: number): InkAnnotation {
-  return { ...base, kind: 'ink', paths, width, rect: inkRect(paths, width), color };
+export function createInk(base: Base, paths: Point[][], color: Rgb, width: number, dash: LineStyle = 'solid'): InkAnnotation {
+  return { ...base, kind: 'ink', paths, width, dash, rect: inkRect(paths, width), color };
+}
+
+// Ein einzelner Punkt (Klick ohne Ziehen): ein winziger Strich, der mit runden Enden als Punkt erscheint
+// (ein Pfad mit nur einem Punkt wird weder von PDFium noch von anderen Programmen gezeichnet).
+export function dotPath(at: Point): Point[] {
+  return [at, { x: at.x + 0.01, y: at.y }];
 }
 
 export function createShape(

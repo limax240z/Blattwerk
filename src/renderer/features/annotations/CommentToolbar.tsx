@@ -23,8 +23,8 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { Annotation, Rgb, StampId } from '../../../shared/annotations';
-import { STAMP_IDS } from '../../../shared/annotations';
+import type { Annotation, LineStyle, Rgb, StampId } from '../../../shared/annotations';
+import { LINE_STYLES, STAMP_IDS } from '../../../shared/annotations';
 import { ERASER_MODES, ERASER_SIZES, type EraserMode, type EraserSize } from '../../../shared/eraser';
 import { IconButton } from '../../components/IconButton';
 import { ColorPicker } from '../../components/ColorPicker';
@@ -58,7 +58,7 @@ const TOOLS: Array<{ tool: Tool; icon: LucideIcon }> = [
   { tool: 'stamp', icon: Stamp },
 ];
 
-const WIDTHS = [1, 2, 3, 4, 6, 8];
+const WIDTHS = [1, 2, 3, 4, 6, 8, 12, 16, 24];
 const FONT_SIZES = [8, 9, 10, 12, 14, 18, 24, 36];
 const WIDTH_KINDS = new Set<Tool>(['ink', 'square', 'circle', 'line', 'arrow']);
 const FILL_KINDS = new Set<Tool>(['square', 'circle']);
@@ -78,6 +78,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const customText = useAnnotations((s) => s.customStamp.text);
   const eraser = useAnnotations((s) => s.eraser);
   const snapShapes = useAnnotations((s) => s.snapShapes);
+  const dash = useAnnotations((s) => s.dash);
   const selected: Annotation | undefined = annotations?.items.find((a) => a.id === annotations.selectedId);
   const readOnly = !tab.canAnnotate;
 
@@ -89,6 +90,8 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const showColor = target !== null && target !== 'stamp' && target !== 'signature' && target !== 'eraser' && !readOnly;
   const showEraser = tool === 'eraser' && !selected && !readOnly;
   const showSnap = tool === 'ink' && !selected && !readOnly;
+  const showDash = target === 'ink' && !readOnly;
+  const currentDash: LineStyle = selected?.kind === 'ink' ? (selected.dash ?? 'solid') : dash;
   const showWidth = target !== null && WIDTH_KINDS.has(target) && !readOnly;
   const showFontSize = target === 'freetext' && !readOnly;
   const opacity = useAnnotations((s) => s.opacity);
@@ -110,7 +113,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
     focusViewer(getRuntime(tab.id));
   };
 
-  const restyle = (patch: Partial<{ color: Rgb; width: number; fontSize: number; opacity: number; fill: Rgb | null }>) => {
+  const restyle = (patch: Partial<{ color: Rgb; width: number; dash: LineStyle; fontSize: number; opacity: number; fill: Rgb | null }>) => {
     if (!selected) return;
     updateAnnotation(tab.id, selected, { ...selected, ...patch } as Annotation);
   };
@@ -134,6 +137,11 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const chooseWidth = (value: number) => {
     useAnnotations.getState().setWidth(value);
     if (selected && 'width' in selected) restyle({ width: value });
+  };
+
+  const chooseDash = (value: LineStyle) => {
+    useAnnotations.getState().setDash(value);
+    if (selected?.kind === 'ink') restyle({ dash: value });
   };
 
   const chooseFontSize = (value: number) => {
@@ -187,7 +195,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
         ))}
       </div>
 
-      {(showColor || showWidth || showFontSize || showFill || showEraser || showSnap || (tool === 'stamp' && !readOnly)) && <span className={styles.separator} />}
+      {(showColor || showWidth || showFontSize || showFill || showEraser || showSnap || showDash || (tool === 'stamp' && !readOnly)) && <span className={styles.separator} />}
 
       {showEraser && (
         <>
@@ -285,6 +293,23 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
           {WIDTHS.map((w) => (
             <option key={w} value={w}>
               {t('comments.widthValue', { value: w })}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {showDash && (
+        <select
+          className={styles.select}
+          aria-label={t('comments.lineStyle.label')}
+          data-tooltip={t('comments.lineStyle.label')}
+          value={currentDash}
+          onChange={(event) => chooseDash(event.target.value as LineStyle)}
+          data-testid="dash-select"
+        >
+          {LINE_STYLES.map((style) => (
+            <option key={style} value={style}>
+              {t(`comments.lineStyle.${style}`)}
             </option>
           ))}
         </select>

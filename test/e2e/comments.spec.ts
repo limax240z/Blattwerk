@@ -194,6 +194,81 @@ test.describe('Kommentieren', () => {
     await handle.close();
   });
 
+  test('Stift: Punkt per Klick, Linienart und Linienstärke, auch nachträglich ändern', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page } = handle;
+    const at = await pageSpace(page);
+    const shapes = page.getByTestId('annotation-overlay-0').locator('g[stroke-linecap="round"]');
+    await page.getByTestId('tool-ink').click();
+
+    // Ein Klick ohne Ziehen setzt einen Punkt
+    await page.getByTestId('width-select').selectOption('12');
+    const spot = at(150, 500);
+    await page.mouse.click(spot.x, spot.y);
+    await expect(cards(page)).toHaveCount(1);
+    await expect(shapes.first()).toHaveAttribute('stroke-width', '12');
+    await expect(shapes.first()).not.toHaveAttribute('stroke-dasharray', /.+/);
+
+    // Gepunktete und gestrichelte Linie. Die frisch gezeichnete Zeichnung ist ausgewählt und würde die Einstellung
+    // übernehmen; darum vorher die Auswahl aufheben (Auswahlwerkzeug, dann wieder Stift).
+    const deselect = async () => {
+      await page.getByTestId('tool-select').click();
+      await page.getByTestId('tool-ink').click();
+    };
+    await deselect();
+    await page.getByTestId('width-select').selectOption('2');
+    await page.getByTestId('dash-select').selectOption('dotted');
+    await drag(page, at(100, 600), at(400, 600));
+    await expect(cards(page)).toHaveCount(2);
+    await expect(shapes.nth(1)).toHaveAttribute('stroke-dasharray', /^0\.001 4$/);
+    await deselect();
+    await page.getByTestId('dash-select').selectOption('dashed');
+    await drag(page, at(100, 650), at(400, 650));
+    await expect(cards(page)).toHaveCount(3);
+    await expect(shapes.nth(2)).toHaveAttribute('stroke-dasharray', '6 6');
+
+    // Die frisch gezeichnete (ausgewählte) Zeichnung nachträglich umstellen
+    await page.getByTestId('dash-select').selectOption('solid');
+    await expect(shapes.nth(2)).not.toHaveAttribute('stroke-dasharray', /.+/);
+    await handle.close();
+  });
+
+  test('Stift: Kreis halten rastet ein, Weiterziehen macht ihn größer', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page } = handle;
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-ink').click();
+    // Wackeliger Kreis um (300, 500) mit Radius 60, am Ende stillhalten
+    const steps = 40;
+    const point = (i: number, radius: number) => at(300 + radius * Math.cos((i / steps) * Math.PI * 2), 500 + radius * Math.sin((i / steps) * Math.PI * 2));
+    const start = point(0, 60);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    for (let i = 1; i <= steps; i++) {
+      const p = point(i, 60 + (i % 3) - 1);
+      await page.mouse.move(p.x, p.y);
+    }
+    await page.waitForTimeout(900);
+    // Weiter nach außen ziehen: doppelter Abstand von der Mitte
+    const far = point(steps, 120);
+    await page.mouse.move(far.x, far.y, { steps: 6 });
+    await page.mouse.up();
+    await expect(cards(page)).toHaveCount(1);
+    const stroke = page.getByTestId('annotation-overlay-0').locator('polyline').first();
+    // Sauber: die gezeichnete Ellipse hat viele gleichmäßige Punkte und ist geschlossen
+    const points = (await stroke.getAttribute('points'))?.trim().split(/\s+/) ?? [];
+    expect(points.length).toBeGreaterThan(40);
+    expect(points[0]).toBe(points.at(-1));
+    const box = await stroke.boundingBox();
+    const small = await page.getByTestId('annotation-overlay-0').boundingBox();
+    if (!box || !small) throw new Error('ohne Größe');
+    // Durchmesser etwa 240 statt 120 Punkte (Seite 595 Punkte breit)
+    const diameter = (box.width / small.width) * 595.28;
+    expect(diameter).toBeGreaterThan(200);
+    expect(diameter).toBeLessThan(280);
+    await handle.close();
+  });
+
   test('Radierer: Strich, Pixel und Textmarker, jeweils ein Schritt zum Widerrufen', async () => {
     const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
     const { page } = handle;
@@ -430,6 +505,63 @@ test.describe('Farbauswahl beim Kommentieren', () => {
     await expect(page.getByTestId('color-fav-7')).toHaveAttribute('aria-checked', 'true');
     await handle.close();
   });
+});
+
+test('Live-Text: Text im Scan auswählen und markieren, ohne die Datei zu ändern', async () => {
+  const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+  tempDirs.push(userData);
+  const file = path.join(userData, 'kopie-scan.pdf');
+  copyFileSync(fixture('scan.pdf'), file);
+  const before = readFileSync(file);
+  const { page, close } = await launchApp([file], { userData });
+  await waitForDocument(page, 1);
+  await page.getByTestId('sidebar-comments').click();
+
+  // Die Seite ist nur ein Bild; der erkannte Text erscheint im Hintergrund als eigene Textebene
+  const word = page.locator('[data-page-number="1"] .textLayer[data-live-text] span', { hasText: 'Testdokument' }).first();
+  await expect(word).toBeAttached({ timeout: 60_000 });
+
+  // Normales Auswählen und Kopieren
+  await selectText(page, 'Testdokument');
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toContain('Testdokument');
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+
+  // Markieren: Hervorhebung genau über dem Wort
+  await page.getByTestId('highlight-button').click();
+  await expect(page.getByTestId('mark-toolbar')).toBeVisible();
+  await selectText(page, 'Testdokument');
+  await expect(cards(page)).toHaveCount(1);
+  const mark = page.getByTestId('annotation-overlay-0').locator('polygon').first();
+  await expect(mark).toBeAttached();
+  const wordBox = await word.boundingBox();
+  const markBox = await mark.boundingBox();
+  if (!wordBox || !markBox) throw new Error('Wort oder Markierung ohne Größe');
+  expect(Math.abs(markBox.y - wordBox.y)).toBeLessThan(wordBox.height / 2);
+  expect(Math.abs(markBox.x - wordBox.x)).toBeLessThan(wordBox.height);
+  // Live-Text ändert die Datei nicht; die Markierung ist bis zum Speichern nur im Speicher
+  expect(readFileSync(file).equals(before)).toBe(true);
+  await close();
+});
+
+test('Hervorheben ohne Text darunter malt wie ein Textmarker', async () => {
+  const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+  tempDirs.push(userData);
+  const file = path.join(userData, 'kopie-marker.pdf');
+  copyFileSync(fixture('text.pdf'), file);
+  const { page, app, close } = await launchApp([file], { userData });
+  await waitForDocument(page, TEXT_PDF.pages);
+  await page.getByTestId('sidebar-comments').click();
+  await menuClick(app, 'view.fitPage');
+  await page.getByTestId('highlight-button').click();
+  await expect(page.getByTestId('mark-toolbar')).toBeVisible();
+  // Unten auf der Seite steht kein Text
+  const at = await pageSpace(page);
+  await drag(page, at(100, 760), at(400, 770));
+  await expect(cards(page)).toHaveCount(1);
+  const stroke = page.getByTestId('annotation-overlay-0').locator('g[stroke-linecap="round"]').first();
+  await expect(stroke).toHaveAttribute('opacity', '0.4');
+  await expect(stroke).toHaveAttribute('stroke-width', '12');
+  await close();
 });
 
 test('Markieren: eigener Modus, Markierung auswählen, Farbe ändern, kürzen und löschen', async () => {

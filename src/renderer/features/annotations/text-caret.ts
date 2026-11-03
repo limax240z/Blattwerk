@@ -1,25 +1,28 @@
-// Textstelle (Textknoten und Zeichenposition) an einem Bildschirmpunkt in der Textebene von pdf.js. Liegt der Punkt
-// zwischen Zeilen oder neben dem Text, gilt die nächstgelegene Stelle (bevorzugt in derselben Zeile).
+// Textstelle (Textknoten und Zeichenposition) an einem Bildschirmpunkt in der Textebene von pdf.js (oder mehreren:
+// pdf.js und Live-Text). Liegt der Punkt zwischen Zeilen oder neben dem Text, gilt die nächstgelegene Stelle (bevorzugt
+// in derselben Zeile).
 export interface Caret {
   node: Text;
   offset: number;
 }
 
-function textNodes(layer: Element): Text[] {
+function textNodes(layers: Element[]): Text[] {
   const list: Text[] = [];
-  const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if ((node as Text).data.trim() !== '') list.push(node as Text);
+  for (const layer of layers) {
+    const walker = document.createTreeWalker(layer, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if ((node as Text).data.trim() !== '') list.push(node as Text);
+    }
   }
   return list;
 }
 
 const distance = (value: number, low: number, high: number) => (value < low ? low - value : value > high ? value - high : 0);
 
-export function caretAt(layer: Element, x: number, y: number): Caret | null {
+export function caretAt(layer: Element | Element[], x: number, y: number): Caret | null {
   const range = document.createRange();
   let best: { node: Text; score: number } | null = null;
-  for (const node of textNodes(layer)) {
+  for (const node of textNodes(Array.isArray(layer) ? layer : [layer])) {
     range.selectNodeContents(node);
     const box = range.getBoundingClientRect();
     if (box.width === 0 || box.height === 0) continue;

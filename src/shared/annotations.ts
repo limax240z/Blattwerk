@@ -95,10 +95,37 @@ export interface FreeTextAnnotation extends AnnotationBase {
   fontSize: number;
 }
 
+// Linienart des Stifts. Das Strichmuster hängt von der Linienstärke ab (siehe dashPattern).
+export type LineStyle = 'solid' | 'dotted' | 'dashed';
+
+export const LINE_STYLES: readonly LineStyle[] = ['solid', 'dotted', 'dashed'];
+
+// Strichmuster in Punkt (Strich, Lücke); leer = durchgehend. Die Linienenden sind rund und ragen je eine halbe
+// Linienbreite über den Strich hinaus: Ein Strich der Länge 0 ergibt also einen runden Punkt.
+export function dashPattern(style: LineStyle, width: number): number[] {
+  switch (style) {
+    case 'dotted':
+      return [0.001, width * 2];
+    case 'dashed':
+      return [width * 3, width * 3];
+    default:
+      return [];
+  }
+}
+
+// Ordnet ein vorhandenes Strichmuster (/BS /D) der nächstliegenden Linienart zu
+export function lineStyleOf(dashArray: readonly number[] | undefined, width: number): LineStyle {
+  const first = dashArray?.[0];
+  if (first === undefined || dashArray?.every((v) => v === 0)) return 'solid';
+  return first < width ? 'dotted' : 'dashed';
+}
+
 export interface InkAnnotation extends AnnotationBase {
   kind: 'ink';
   paths: Point[][];
   width: number;
+  // fehlt bei vorhandenen Zeichnungen: durchgehend
+  dash?: LineStyle;
 }
 
 export interface ShapeAnnotation extends AnnotationBase {

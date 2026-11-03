@@ -125,7 +125,8 @@ jobs:
   release:
     name: Veröffentlichen
     needs: package
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # workflow_dispatch: Lauf, den „Zusammenführen“ nach dem automatischen Zusammenführen startet
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -154,3 +155,27 @@ jobs:
           fi
           gh release create "v$version" dist/* --repo "$REPOSITORY" --title "Blattwerk $version" \
             --notes "Automatisch gebaut aus ${GITHUB_SHA::7}. Updates lädt Blattwerk über „Nach Updates suchen …“ selbst."
+
+  # Auftraggeber (2026-11-03): Pull Requests immer automatisch zusammenführen, sobald Tests und Pakete grün sind.
+  # GitHubs eigene automatische Zusammenführung braucht Schutzregeln für main (nur mit GitHub Pro); ohne sie würde sie
+  # sofort zusammenführen, noch vor den Tests. Deshalb hier, nach allen anderen Aufträgen. Mit GITHUB_TOKEN löst das
+  # Zusammenführen keinen neuen Lauf auf main aus; der wird deshalb ausdrücklich gestartet (workflow_dispatch).
+  merge:
+    name: Zusammenführen
+    needs: package
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - name: Zusammenführen und Veröffentlichen starten
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # --match-head-commit: nur der geprüfte Stand, nicht ein inzwischen nachgeschobener
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$HEAD_SHA"
+          gh workflow run build.yml --repo "$GITHUB_REPOSITORY" --ref main

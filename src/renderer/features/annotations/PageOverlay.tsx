@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, FreeTextAnnotation, InkAnnotation, MarkupAnnotation, Point, Quad, Rect } from '../../../shared/annotations';
-import { boundsOf, normalizeRect } from '../../../shared/annotations';
+import { boundsOf, dashPattern, normalizeRect } from '../../../shared/annotations';
 import { ERASER_RADIUS_PX, erasePaths, pathsTouch, quadsTouch } from '../../../shared/eraser';
 import { CUSTOM_STAMP_COLORS, DRAWING_TOOLS as STORE_DRAWING_TOOLS, useAnnotations, type Tool } from '../../state/annotations-store';
 import { i18n } from '../../i18n';
@@ -22,6 +22,7 @@ import {
   appendInkStroke,
   createFreeText,
   createInk,
+  dotPath,
   createLine,
   createNote,
   createShape,
@@ -33,7 +34,7 @@ import {
   simplifyPath,
 } from './create';
 import { dragRect, inkRect, isMovable, isResizable, lineRect, quadsFromRects, rectOfQuads, resizeFrom, translate } from './geometry';
-import { recognizeShape, SNAP_HOLD_MS, SNAP_JITTER_PX } from './shape-snap';
+import { recognizeShape, SNAP_HOLD_MS, SNAP_JITTER_PX, transformShape } from './shape-snap';
 import { caretAt, rangeBetween, type Caret } from './text-caret';
 import { rangeTextRects } from './text-selection';
 import styles from './PageOverlay.module.css';
@@ -42,8 +43,9 @@ import styles from './PageOverlay.module.css';
 type Gesture =
   | { kind: 'rect'; tool: 'square' | 'circle' | 'freetext' | 'redact'; from: Point; to: Point }
   | { kind: 'line'; tool: 'line' | 'arrow'; from: Point; to: Point }
-  // snapped: erkannte Form, wenn der Stift am Ende still gehalten wurde (ersetzt den Freihandstrich)
-  | { kind: 'ink'; points: Point[]; snapped?: Point[] }
+  // snapped: erkannte Form, wenn der Stift am Ende still gehalten wurde (ersetzt den Freihandstrich); shape und grab:
+  // die Form beim Einrasten und die Stiftposition dabei (Bezug fürs Weiterziehen)
+  | { kind: 'ink'; points: Point[]; snapped?: Point[]; shape?: Point[]; grab?: Point }
   // client: Zeigerlage beim Anfassen; während des Ziehens wird der Kommentar nur verschoben, nicht neu gezeichnet
   | { kind: 'move'; id: string; origin: Point; dx: number; dy: number; client: { x: number; y: number } }
   | { kind: 'resize'; id: string; fixed: Point; to: Point }
@@ -170,7 +172,7 @@ export function PageOverlay({
       const current = gestureRef.current;
       if (current?.kind !== 'ink' || current.snapped || !store().snapShapes) return;
       const snapped = recognizeShape(current.points);
-      if (snapped) setGesture({ ...current, snapped });
+      if (snapped) setGesture({ ...current, snapped, shape: snapped, grab: current.points[current.points.length - 1] });
     }, SNAP_HOLD_MS);
   };
   const setGesture = (next: Gesture | null) => {
@@ -341,7 +343,11 @@ export function PageOverlay({
     const [vx, vy] = geometry.toView(p);
     return { x: box.left + (vx / geometry.width) * box.width, y: box.top + (vy / geometry.height) * box.height };
   };
-  const textLayer = () => svgRef.current?.closest('.page')?.querySelector('.textLayer') ?? null;
+  // Textebene von pdf.js und, falls vorhanden, Live-Text (erkannter Text in Bildern)
+  const textLayer = () => {
+    const layers = Array.from(svgRef.current?.closest('.page')?.querySelectorAll('.textLayer') ?? []);
+    return layers.length > 0 ? layers : null;
+  };
 
   const onMarkupHandleDown = (event: ReactPointerEvent, a: MarkupAnnotation, which: 'start' | 'end') => {
     if (event.button !== 0) return;
@@ -397,8 +403,10 @@ export function PageOverlay({
     switch (current.kind) {
       case 'ink': {
         if (current.snapped) {
-          // Eine erkannte Gerade folgt dem Stift weiter (Endpunkt nachziehen), andere Formen bleiben stehen
+          // Eine erkannte Gerade folgt dem Stift weiter (Endpunkt nachziehen); andere Formen wachsen, schrumpfen und
+          // drehen sich um ihre Mitte
           if (current.snapped.length === 2) scheduleGesture({ ...current, snapped: [current.snapped[0] as Point, at] });
+          else if (current.shape && current.grab) scheduleGesture({ ...current, snapped: transformShape(current.shape, current.grab, at) });
           return;
         }
         const coalesced = event.nativeEvent.getCoalescedEvents?.() ?? [];
@@ -436,11 +444,12 @@ export function PageOverlay({
     const current = gestureRef.current;
     setGesture(null);
     if (!current) return;
-    const { colors, width, fontSize } = store();
+    const { colors, width, fontSize, dash } = store();
     switch (current.kind) {
       case 'ink': {
-        const path = current.snapped ?? simplifyPath(current.points);
-        if (path.length < 2) return;
+        // Klick ohne Ziehen setzt einen Punkt
+        const stroke = current.snapped ?? simplifyPath(current.points);
+        const path = stroke.length < 2 ? dotPath(stroke[0] ?? current.points[0] ?? { x: 0, y: 0 }) : stroke;
         const last = lastInk.get(tabId);
         const previous = last ? items.find((a) => a.id === last.id) : undefined;
         const now = time;
@@ -448,13 +457,14 @@ export function PageOverlay({
           previous?.kind === 'ink' &&
           last?.pageIndex === pageIndex &&
           now - last.time < INK_MERGE_MS &&
-          previous.width === width
+          previous.width === width &&
+          (previous.dash ?? 'solid') === dash
         ) {
           updateAnnotation(tabId, previous, appendInkStroke(previous, path));
           lastInk.set(tabId, { id: previous.id, pageIndex, time: now });
           return;
         }
-        const ink: InkAnnotation = createInk(baseFields(pageIndex), [path], colors.ink, width);
+        const ink: InkAnnotation = createInk(baseFields(pageIndex), [path], colors.ink, width, dash);
         addAnnotation(tabId, ink);
         lastInk.set(tabId, { id: ink.id, pageIndex, time: now });
         return;
@@ -609,6 +619,7 @@ function draftShape(gesture: Gesture, geometry: PageGeometry, settings: ReturnTy
           strokeWidth={width}
           strokeLinecap="round"
           strokeLinejoin="round"
+          strokeDasharray={dashPattern(settings.dash, width).join(' ') || undefined}
         />
       );
     case 'line': {

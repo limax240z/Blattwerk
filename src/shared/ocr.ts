@@ -121,3 +121,33 @@ export function boldLines(strokes: number[]): boolean[] {
   const median = sorted[Math.floor(sorted.length / 2)] ?? 0;
   return strokes.map((stroke) => (strokes.length >= 3 ? stroke > median * 1.3 : stroke > 0.16));
 }
+
+// Zeilen zum Auswählen und Markieren (Live-Text, ohne die Datei zu ändern). Alle Wörter einer Zeile bekommen dieselbe
+// Ober- und Unterkante, damit Markierungen gleichmäßig hoch werden. Bildpunkte, Ursprung oben links. Anders als bei
+// der Textebene im PDF bleibt jedes Zeichen erhalten (keine Standardschrift nötig).
+export interface SelectableLine {
+  top: number;
+  bottom: number;
+  words: Array<{ text: string; left: number; right: number }>;
+}
+
+export function selectableLines(blocks: OcrBlock[] | null): SelectableLine[] {
+  const lines: SelectableLine[] = [];
+  for (const block of blocks ?? []) {
+    for (const paragraph of block.paragraphs) {
+      for (const line of paragraph.lines) {
+        const words = line.words
+          .map((word) => ({ ...word, text: [...word.text.normalize('NFC')].map((char) => LIGATURES[char] ?? char).join('').trim() }))
+          .filter((word) => word.text !== '' && word.confidence >= MIN_CONFIDENCE && word.bbox.x1 > word.bbox.x0 && word.bbox.y1 > word.bbox.y0)
+          .sort((a, b) => a.bbox.x0 - b.bbox.x0);
+        if (words.length === 0) continue;
+        lines.push({
+          top: Math.min(...words.map((word) => word.bbox.y0)),
+          bottom: Math.max(...words.map((word) => word.bbox.y1)),
+          words: words.map((word) => ({ text: word.text, left: word.bbox.x0, right: word.bbox.x1 })),
+        });
+      }
+    }
+  }
+  return lines;
+}
