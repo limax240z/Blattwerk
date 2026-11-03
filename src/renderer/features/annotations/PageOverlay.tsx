@@ -34,7 +34,7 @@ import {
   simplifyPath,
 } from './create';
 import { dragRect, inkRect, isMovable, isResizable, lineRect, quadsFromRects, rectOfQuads, resizeFrom, translate } from './geometry';
-import { recognizeShape, SNAP_HOLD_MS, SNAP_JITTER_PX } from './shape-snap';
+import { recognizeShape, SNAP_HOLD_MS, SNAP_JITTER_PX, transformShape } from './shape-snap';
 import { caretAt, rangeBetween, type Caret } from './text-caret';
 import { rangeTextRects } from './text-selection';
 import styles from './PageOverlay.module.css';
@@ -43,8 +43,9 @@ import styles from './PageOverlay.module.css';
 type Gesture =
   | { kind: 'rect'; tool: 'square' | 'circle' | 'freetext' | 'redact'; from: Point; to: Point }
   | { kind: 'line'; tool: 'line' | 'arrow'; from: Point; to: Point }
-  // snapped: erkannte Form, wenn der Stift am Ende still gehalten wurde (ersetzt den Freihandstrich)
-  | { kind: 'ink'; points: Point[]; snapped?: Point[] }
+  // snapped: erkannte Form, wenn der Stift am Ende still gehalten wurde (ersetzt den Freihandstrich); shape und grab:
+  // die Form beim Einrasten und die Stiftposition dabei (Bezug fürs Weiterziehen)
+  | { kind: 'ink'; points: Point[]; snapped?: Point[]; shape?: Point[]; grab?: Point }
   // client: Zeigerlage beim Anfassen; während des Ziehens wird der Kommentar nur verschoben, nicht neu gezeichnet
   | { kind: 'move'; id: string; origin: Point; dx: number; dy: number; client: { x: number; y: number } }
   | { kind: 'resize'; id: string; fixed: Point; to: Point }
@@ -171,7 +172,7 @@ export function PageOverlay({
       const current = gestureRef.current;
       if (current?.kind !== 'ink' || current.snapped || !store().snapShapes) return;
       const snapped = recognizeShape(current.points);
-      if (snapped) setGesture({ ...current, snapped });
+      if (snapped) setGesture({ ...current, snapped, shape: snapped, grab: current.points[current.points.length - 1] });
     }, SNAP_HOLD_MS);
   };
   const setGesture = (next: Gesture | null) => {
@@ -402,8 +403,10 @@ export function PageOverlay({
     switch (current.kind) {
       case 'ink': {
         if (current.snapped) {
-          // Eine erkannte Gerade folgt dem Stift weiter (Endpunkt nachziehen), andere Formen bleiben stehen
+          // Eine erkannte Gerade folgt dem Stift weiter (Endpunkt nachziehen); andere Formen wachsen, schrumpfen und
+          // drehen sich um ihre Mitte
           if (current.snapped.length === 2) scheduleGesture({ ...current, snapped: [current.snapped[0] as Point, at] });
+          else if (current.shape && current.grab) scheduleGesture({ ...current, snapped: transformShape(current.shape, current.grab, at) });
           return;
         }
         const coalesced = event.nativeEvent.getCoalescedEvents?.() ?? [];

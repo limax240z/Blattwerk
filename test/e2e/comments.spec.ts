@@ -233,6 +233,42 @@ test.describe('Kommentieren', () => {
     await handle.close();
   });
 
+  test('Stift: Kreis halten rastet ein, Weiterziehen macht ihn größer', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page } = handle;
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-ink').click();
+    // Wackeliger Kreis um (300, 500) mit Radius 60, am Ende stillhalten
+    const steps = 40;
+    const point = (i: number, radius: number) => at(300 + radius * Math.cos((i / steps) * Math.PI * 2), 500 + radius * Math.sin((i / steps) * Math.PI * 2));
+    const start = point(0, 60);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    for (let i = 1; i <= steps; i++) {
+      const p = point(i, 60 + (i % 3) - 1);
+      await page.mouse.move(p.x, p.y);
+    }
+    await page.waitForTimeout(900);
+    // Weiter nach außen ziehen: doppelter Abstand von der Mitte
+    const far = point(steps, 120);
+    await page.mouse.move(far.x, far.y, { steps: 6 });
+    await page.mouse.up();
+    await expect(cards(page)).toHaveCount(1);
+    const stroke = page.getByTestId('annotation-overlay-0').locator('polyline').first();
+    // Sauber: die gezeichnete Ellipse hat viele gleichmäßige Punkte und ist geschlossen
+    const points = (await stroke.getAttribute('points'))?.trim().split(/\s+/) ?? [];
+    expect(points.length).toBeGreaterThan(40);
+    expect(points[0]).toBe(points.at(-1));
+    const box = await stroke.boundingBox();
+    const small = await page.getByTestId('annotation-overlay-0').boundingBox();
+    if (!box || !small) throw new Error('ohne Größe');
+    // Durchmesser etwa 240 statt 120 Punkte (Seite 595 Punkte breit)
+    const diameter = (box.width / small.width) * 595.28;
+    expect(diameter).toBeGreaterThan(200);
+    expect(diameter).toBeLessThan(280);
+    await handle.close();
+  });
+
   test('Radierer: Strich, Pixel und Textmarker, jeweils ein Schritt zum Widerrufen', async () => {
     const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
     const { page } = handle;

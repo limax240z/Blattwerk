@@ -147,3 +147,25 @@ export function recognizeShape(points: Point[]): Point[] | null {
   if (ellipseError(points, box) < 0.13) return ellipse(box.minX, box.minY, box.maxX, box.maxY);
   return null;
 }
+
+// Fast gerade Drehungen (bis zu so vielen Grad neben einem Vielfachen von 90°) rasten gerade ein
+const STRAIGHT_DEG = 8;
+
+/**
+ * Nach dem Einrasten weiterziehen: Die Form wächst oder schrumpft um ihre Mitte, je nachdem wie weit der Stift sich von
+ * der Mitte entfernt, und dreht sich mit ihm. grab = Stiftposition beim Einrasten, at = jetzt.
+ */
+export function transformShape(base: Point[], grab: Point, at: Point): Point[] {
+  const box = bounds(base);
+  const c = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 };
+  const r0 = dist(grab, c);
+  if (r0 < 1) return base;
+  const scale = Math.min(50, Math.max(0.05, dist(at, c) / r0));
+  let angle = Math.atan2(at.y - c.y, at.x - c.x) - Math.atan2(grab.y - c.y, grab.x - c.x);
+  angle = Math.atan2(Math.sin(angle), Math.cos(angle));
+  const quarter = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+  if (Math.abs(angle - quarter) <= (STRAIGHT_DEG * Math.PI) / 180) angle = quarter;
+  const cos = Math.cos(angle) * scale;
+  const sin = Math.sin(angle) * scale;
+  return base.map((p) => ({ x: c.x + cos * (p.x - c.x) - sin * (p.y - c.y), y: c.y + sin * (p.x - c.x) + cos * (p.y - c.y) }));
+}

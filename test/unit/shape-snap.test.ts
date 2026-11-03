@@ -1,7 +1,7 @@
 // Formerkennung des Stifts: wackelige Striche werden zu Linie, Rechteck, Dreieck oder Ellipse.
 import { describe, expect, it } from 'vitest';
 import type { Point } from '../../src/shared/annotations';
-import { recognizeShape } from '../../src/renderer/features/annotations/shape-snap';
+import { recognizeShape, transformShape } from '../../src/renderer/features/annotations/shape-snap';
 
 // Kleine, wiederholbare Unruhe statt Zufall
 const wobble = (i: number, amount: number) => Math.sin(i * 12.9898) * amount;
@@ -57,5 +57,36 @@ describe('Formerkennung', () => {
 
   it('ignoriert Punkte und kurze Kringel', () => {
     expect(recognizeShape([{ x: 0, y: 0 }, { x: 1, y: 1 }, { x: 2, y: 0 }])).toBeNull();
+  });
+});
+
+describe('Form nach dem Einrasten weiterziehen', () => {
+  const square = [
+    { x: 0, y: 0 },
+    { x: 100, y: 0 },
+    { x: 100, y: 100 },
+    { x: 0, y: 100 },
+    { x: 0, y: 0 },
+  ];
+  const grab = { x: 100, y: 100 };
+
+  it('weiter weg von der Mitte vergrößert, näher verkleinert, die Mitte bleibt', () => {
+    const big = transformShape(square, grab, { x: 150, y: 150 });
+    expect(big[0]).toEqual({ x: -50, y: -50 });
+    expect(big[2]).toEqual({ x: 150, y: 150 });
+    const small = transformShape(square, grab, { x: 75, y: 75 });
+    expect(small[0]).toEqual({ x: 25, y: 25 });
+  });
+
+  it('fast gerade bleibt gerade, deutlich gedreht dreht mit', () => {
+    // 5° neben der Ecke: rastet gerade ein
+    const a = (5 * Math.PI) / 180;
+    const r = Math.hypot(50, 50);
+    const near = transformShape(square, grab, { x: 50 + r * Math.cos(Math.PI / 4 + a), y: 50 + r * Math.sin(Math.PI / 4 + a) });
+    expect(near[1]?.x).toBeCloseTo(100);
+    expect(near[1]?.y).toBeCloseTo(0);
+    // 45° gedreht: Ecke wandert
+    const turned = transformShape(square, grab, { x: 50, y: 50 + r });
+    expect(turned[0]?.x).toBeCloseTo(50);
   });
 });
