@@ -471,6 +471,63 @@ test.describe('Farbauswahl beim Kommentieren', () => {
   });
 });
 
+test('Live-Text: Text im Scan auswählen und markieren, ohne die Datei zu ändern', async () => {
+  const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+  tempDirs.push(userData);
+  const file = path.join(userData, 'kopie-scan.pdf');
+  copyFileSync(fixture('scan.pdf'), file);
+  const before = readFileSync(file);
+  const { page, close } = await launchApp([file], { userData });
+  await waitForDocument(page, 1);
+  await page.getByTestId('sidebar-comments').click();
+
+  // Die Seite ist nur ein Bild; der erkannte Text erscheint im Hintergrund als eigene Textebene
+  const word = page.locator('[data-page-number="1"] .textLayer[data-live-text] span', { hasText: 'Testdokument' }).first();
+  await expect(word).toBeAttached({ timeout: 60_000 });
+
+  // Normales Auswählen und Kopieren
+  await selectText(page, 'Testdokument');
+  expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toContain('Testdokument');
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+
+  // Markieren: Hervorhebung genau über dem Wort
+  await page.getByTestId('highlight-button').click();
+  await expect(page.getByTestId('mark-toolbar')).toBeVisible();
+  await selectText(page, 'Testdokument');
+  await expect(cards(page)).toHaveCount(1);
+  const mark = page.getByTestId('annotation-overlay-0').locator('polygon').first();
+  await expect(mark).toBeAttached();
+  const wordBox = await word.boundingBox();
+  const markBox = await mark.boundingBox();
+  if (!wordBox || !markBox) throw new Error('Wort oder Markierung ohne Größe');
+  expect(Math.abs(markBox.y - wordBox.y)).toBeLessThan(wordBox.height / 2);
+  expect(Math.abs(markBox.x - wordBox.x)).toBeLessThan(wordBox.height);
+  // Live-Text ändert die Datei nicht; die Markierung ist bis zum Speichern nur im Speicher
+  expect(readFileSync(file).equals(before)).toBe(true);
+  await close();
+});
+
+test('Hervorheben ohne Text darunter malt wie ein Textmarker', async () => {
+  const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+  tempDirs.push(userData);
+  const file = path.join(userData, 'kopie-marker.pdf');
+  copyFileSync(fixture('text.pdf'), file);
+  const { page, app, close } = await launchApp([file], { userData });
+  await waitForDocument(page, TEXT_PDF.pages);
+  await page.getByTestId('sidebar-comments').click();
+  await menuClick(app, 'view.fitPage');
+  await page.getByTestId('highlight-button').click();
+  await expect(page.getByTestId('mark-toolbar')).toBeVisible();
+  // Unten auf der Seite steht kein Text
+  const at = await pageSpace(page);
+  await drag(page, at(100, 760), at(400, 770));
+  await expect(cards(page)).toHaveCount(1);
+  const stroke = page.getByTestId('annotation-overlay-0').locator('g[stroke-linecap="round"]').first();
+  await expect(stroke).toHaveAttribute('opacity', '0.4');
+  await expect(stroke).toHaveAttribute('stroke-width', '12');
+  await close();
+});
+
 test('Markieren: eigener Modus, Markierung auswählen, Farbe ändern, kürzen und löschen', async () => {
   const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
   tempDirs.push(userData);

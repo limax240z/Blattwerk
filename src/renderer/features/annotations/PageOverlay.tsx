@@ -342,7 +342,11 @@ export function PageOverlay({
     const [vx, vy] = geometry.toView(p);
     return { x: box.left + (vx / geometry.width) * box.width, y: box.top + (vy / geometry.height) * box.height };
   };
-  const textLayer = () => svgRef.current?.closest('.page')?.querySelector('.textLayer') ?? null;
+  // Textebene von pdf.js und, falls vorhanden, Live-Text (erkannter Text in Bildern)
+  const textLayer = () => {
+    const layers = Array.from(svgRef.current?.closest('.page')?.querySelectorAll('.textLayer') ?? []);
+    return layers.length > 0 ? layers : null;
+  };
 
   const onMarkupHandleDown = (event: ReactPointerEvent, a: MarkupAnnotation, which: 'start' | 'end') => {
     if (event.button !== 0) return;

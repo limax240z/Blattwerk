@@ -27,6 +27,9 @@ export const NOTE_SIZE = { width: 20, height: 20 };
 export const FREETEXT_SIZE = { width: 180, height: 40 };
 export const SHAPE_SIZE = { width: 100, height: 60 };
 export const LINE_LENGTH = 100;
+// Freihand-Textmarker (Zug mit dem Hervorheben-Werkzeug, wo kein Text liegt): Breite in Punkt und Deckkraft
+export const MARKER_WIDTH = 12;
+export const MARKER_OPACITY = 0.4;
 export const STAMP_SIZE = { width: 160, height: 48 };
 // Breite einer neu gesetzten Unterschrift (Höhe nach Seitenverhältnis des Bildes, höchstens 80 pt)
 export const SIGNATURE_WIDTH = 180;
