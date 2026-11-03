@@ -1,5 +1,5 @@
 // Updates (ADR 0025, ADR 0027): Stand prüfen beim Start und wenn das Fenster nach vorn kommt; neue Versionen im Netz
-// suchen und laden („Nach Updates suchen“, beim Start auch still im Hauptprozess). Hinweis ausblenden gilt nur für die
+// suchen und laden („Nach Updates suchen“, sonst still im Hauptprozess, siehe main/update/schedule.ts). Hinweis ausblenden gilt nur für die
 // angezeigte Version.
 import { create } from 'zustand';
 import type { OnlineCheck, UpdateProgress, UpdateStatus } from '../../../shared/update';

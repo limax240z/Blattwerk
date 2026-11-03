@@ -39,6 +39,7 @@ import { TabGhost } from './tab-ghost';
 import { isBlankDocumentPath, removeBlankDocuments } from './files/blank-document';
 import { cleanupInstalledUpdates, defaultUpdateFolder, runPendingInstall, setCustomUpdateFolder } from './update/updater';
 import { checkOnline } from './update/online';
+import { shouldCheck, TICK_MS, type UpdateTrigger } from './update/schedule';
 import { attachNativeGlass, describeNativeGlass, nativeGlassAvailable } from './native-glass';
 
 // Testschalter wirken nur beim Entwickeln, nie in der installierten App.
@@ -210,16 +211,34 @@ function broadcast(channel: string, payload?: unknown): void {
 
 // Neue Version im Netz suchen und laden (ADR 0027); alle Fenster sehen Fortschritt und Ergebnis
 async function checkUpdatesOnline(): Promise<OnlineCheck> {
-  saveSettings({ lastUpdateCheck: Date.now() });
+  lastUpdateRun = Date.now();
+  saveSettings({ lastUpdateCheck: lastUpdateRun });
   const result = await checkOnline((progress) => broadcast(IPC.updateProgress, progress));
   broadcast(IPC.updateResult, result);
   return result;
 }
 
-// Bei jedem Start still nachsehen (Wunsch des Auftraggebers, 2026-10-19); nur die installierte App, nie in Testläufen
-function scheduleAutoUpdateCheck(): void {
+// Still im Hintergrund nachsehen (Regeln in update/schedule.ts); nur die installierte App, nie in Testläufen
+let lastUpdateRun: number | null = null;
+let awaySince: number | null = null;
+
+function autoUpdateCheck(trigger: UpdateTrigger): void {
   if (!app.isPackaged || runHidden || isE2E) return;
-  setTimeout(() => void checkUpdatesOnline().catch(() => undefined), 5000);
+  if (!shouldCheck(trigger, { now: Date.now(), last: lastUpdateRun, awaySince })) return;
+  void checkUpdatesOnline().catch(() => undefined);
+}
+
+function scheduleAutoUpdateCheck(): void {
+  setTimeout(() => autoUpdateCheck('start'), 5000);
+  setInterval(() => autoUpdateCheck('timer'), TICK_MS).unref();
+  // Ein Wechsel zwischen eigenen Fenstern ist ein Verlassen und Wiederkommen im selben Augenblick und zählt nicht
+  app.on('browser-window-blur', () => {
+    awaySince ??= Date.now();
+  });
+  app.on('browser-window-focus', () => {
+    autoUpdateCheck('return');
+    awaySince = null;
+  });
 }
 
 async function rememberRecent(filePath: string): Promise<void> {
@@ -248,6 +267,7 @@ async function openPathFor(win: BrowserWindow, filePath: string, options: { rece
 // anderen Fenster offen, kommt dieses nach vorn; sonst entsteht ein neues Fenster. Ohne anfragendes Fenster gilt das
 // vordere. 'elsewhere' heißt für den Renderer: nichts zu tun.
 async function openDocument(requester: BrowserWindow | null, filePath: string, options: { recent?: boolean } = {}): Promise<OpenResult> {
+  autoUpdateCheck('document');
   const from = contextOf(requester);
   const elsewhere: OpenResult = { ok: false, error: 'elsewhere' };
   const ownerId = files.documentOwner(filePath);
