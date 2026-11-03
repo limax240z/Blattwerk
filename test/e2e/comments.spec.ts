@@ -194,6 +194,45 @@ test.describe('Kommentieren', () => {
     await handle.close();
   });
 
+  test('Stift: Punkt per Klick, Linienart und Linienstärke, auch nachträglich ändern', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page } = handle;
+    const at = await pageSpace(page);
+    const shapes = page.getByTestId('annotation-overlay-0').locator('g[stroke-linecap="round"]');
+    await page.getByTestId('tool-ink').click();
+
+    // Ein Klick ohne Ziehen setzt einen Punkt
+    await page.getByTestId('width-select').selectOption('12');
+    const spot = at(150, 500);
+    await page.mouse.click(spot.x, spot.y);
+    await expect(cards(page)).toHaveCount(1);
+    await expect(shapes.first()).toHaveAttribute('stroke-width', '12');
+    await expect(shapes.first()).not.toHaveAttribute('stroke-dasharray', /.+/);
+
+    // Gepunktete und gestrichelte Linie. Die frisch gezeichnete Zeichnung ist ausgewählt und würde die Einstellung
+    // übernehmen; darum vorher die Auswahl aufheben (Auswahlwerkzeug, dann wieder Stift).
+    const deselect = async () => {
+      await page.getByTestId('tool-select').click();
+      await page.getByTestId('tool-ink').click();
+    };
+    await deselect();
+    await page.getByTestId('width-select').selectOption('2');
+    await page.getByTestId('dash-select').selectOption('dotted');
+    await drag(page, at(100, 600), at(400, 600));
+    await expect(cards(page)).toHaveCount(2);
+    await expect(shapes.nth(1)).toHaveAttribute('stroke-dasharray', /^0\.001 4$/);
+    await deselect();
+    await page.getByTestId('dash-select').selectOption('dashed');
+    await drag(page, at(100, 650), at(400, 650));
+    await expect(cards(page)).toHaveCount(3);
+    await expect(shapes.nth(2)).toHaveAttribute('stroke-dasharray', '6 6');
+
+    // Die frisch gezeichnete (ausgewählte) Zeichnung nachträglich umstellen
+    await page.getByTestId('dash-select').selectOption('solid');
+    await expect(shapes.nth(2)).not.toHaveAttribute('stroke-dasharray', /.+/);
+    await handle.close();
+  });
+
   test('Radierer: Strich, Pixel und Textmarker, jeweils ein Schritt zum Widerrufen', async () => {
     const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
     const { page } = handle;

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Annotation, Rgb, StampId } from '../../shared/annotations';
+import type { Annotation, LineStyle, Rgb, StampId } from '../../shared/annotations';
 import type { EraserMode, EraserSize } from '../../shared/eraser';
 
 export type Tool =
@@ -118,6 +118,8 @@ interface AnnotationsState {
   pendingSignature: PendingSignature | null;
   eraser: { mode: EraserMode; size: EraserSize };
   snapShapes: boolean;
+  // Linienart des Stifts
+  dash: LineStyle;
   init: (tabId: string) => void;
   // Gesicherten Zustand eines Dokumentstands wiederherstellen (Rückgängig/Wiederholen von Seitenoperationen)
   restore: (tabId: string, tab: TabAnnotations) => void;
@@ -144,6 +146,7 @@ interface AnnotationsState {
   setEraser: (eraser: { mode: EraserMode; size: EraserSize }) => void;
   // Formerkennung beim Stift (Stillhalten am Strichende macht eine saubere Form)
   setSnapShapes: (on: boolean) => void;
+  setDash: (dash: LineStyle) => void;
 }
 
 function run(items: Annotation[], command: Command): Annotation[] {
@@ -204,6 +207,7 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     pendingSignature: null,
     eraser: { mode: 'pixel', size: 'medium' },
     snapShapes: true,
+    dash: 'solid',
     init: (tabId) => set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...EMPTY } } })),
     restore: (tabId, tab) =>
       set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...tab, loaded: true, editingId: null } } })),
@@ -272,6 +276,7 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     setStamp: (stamp) => set({ stamp }),
     setEraser: (eraser) => set({ eraser }),
     setSnapShapes: (snapShapes) => set({ snapShapes }),
+    setDash: (dash) => set({ dash }),
     setPendingSignature: (pendingSignature) =>
       set((state) => ({ pendingSignature, tool: pendingSignature ? 'signature' : state.tool === 'signature' ? 'select' : state.tool })),
   };

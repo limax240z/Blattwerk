@@ -5,6 +5,7 @@ import type {
   FreeTextAnnotation,
   InkAnnotation,
   LineAnnotation,
+  LineStyle,
   MarkupAnnotation,
   NoteAnnotation,
   Point,
@@ -50,8 +51,14 @@ export function createFreeText(base: Base, rect: Rect, color: Rgb, fontSize: num
   return { ...base, kind: 'freetext', rect, color, fontSize };
 }
 
-export function createInk(base: Base, paths: Point[][], color: Rgb, width: number): InkAnnotation {
-  return { ...base, kind: 'ink', paths, width, rect: inkRect(paths, width), color };
+export function createInk(base: Base, paths: Point[][], color: Rgb, width: number, dash: LineStyle = 'solid'): InkAnnotation {
+  return { ...base, kind: 'ink', paths, width, dash, rect: inkRect(paths, width), color };
+}
+
+// Ein einzelner Punkt (Klick ohne Ziehen): ein winziger Strich, der mit runden Enden als Punkt erscheint
+// (ein Pfad mit nur einem Punkt wird weder von PDFium noch von anderen Programmen gezeichnet).
+export function dotPath(at: Point): Point[] {
+  return [at, { x: at.x + 0.01, y: at.y }];
 }
 
 export function createShape(

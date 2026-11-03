@@ -4,6 +4,7 @@ import type {
   Annotation,
   AnnotationChanges,
   AnnotationUpsert,
+  InkAnnotation,
   Point,
   Quad,
   Rect,
@@ -13,7 +14,7 @@ import type {
   StampAnnotation,
   StatusEntry,
 } from '../../shared/annotations';
-import { stampColor, stampLines, toPdfDate } from '../../shared/annotations';
+import { dashPattern, stampColor, stampLines, toPdfDate } from '../../shared/annotations';
 import type { FormFieldValue } from '../../shared/forms';
 import type { ComposePart, PageOperation } from '../../shared/pages';
 import type { RedactionArea, TextSearchOptions } from '../../shared/redaction';
@@ -48,6 +49,7 @@ const SUBTYPE = {
 
 const COLOR_TYPE = { color: 0, interior: 1 } as const;
 const BORDER_SOLID = 1;
+const BORDER_DASHED = 2;
 const LINE_END = { none: 0, openArrow: 4 } as const;
 const REPLY_TYPE_REPLY = 1;
 const FONT_HELVETICA = 4;
@@ -410,7 +412,7 @@ export class PdfiumEngine {
       case 'ink':
         if (!isNew) m.FPDFAnnot_RemoveInkList(annot);
         for (const path of a.paths) this.#addInkStroke(annot, path);
-        m.EPDFAnnot_SetBorderStyle(annot, BORDER_SOLID, a.width);
+        this.#setInkBorder(annot, a);
         break;
       case 'square':
       case 'circle':
@@ -452,6 +454,18 @@ export class PdfiumEngine {
     // FS_QUADPOINTSF: x1,y1 (oben links), x2,y2 (oben rechts), x3,y3 (unten links), x4,y4 (unten rechts)
     const values = quad.flatMap((p: Point) => [p.x, p.y]);
     withFloats(m, values, (ptr) => m.FPDFAnnot_AppendAttachmentPoints(annot, ptr));
+  }
+
+  // Rahmenstil des Stifts: durchgehend, oder gestrichelt mit Strichmuster (/BS /D)
+  #setInkBorder(annot: number, a: InkAnnotation): void {
+    const m = this.#m;
+    const pattern = dashPattern(a.dash ?? 'solid', a.width);
+    if (pattern.length === 0) {
+      m.EPDFAnnot_SetBorderStyle(annot, BORDER_SOLID, a.width);
+      return;
+    }
+    m.EPDFAnnot_SetBorderStyle(annot, BORDER_DASHED, a.width);
+    withFloats(m, pattern, (ptr) => m.EPDFAnnot_SetBorderDashPattern(annot, ptr, pattern.length));
   }
 
   #addInkStroke(annot: number, path: Point[]): void {

@@ -1,5 +1,5 @@
 import type { Annotation, Point, Rgb } from '../../../shared/annotations';
-import { stampColor as colorOfStamp, stampLines } from '../../../shared/annotations';
+import { dashPattern, stampColor as colorOfStamp, stampLines } from '../../../shared/annotations';
 import type { PageGeometry } from '../../engine/coords';
 
 export const css = ({ r, g, b }: Rgb) => `rgb(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)})`;
@@ -99,7 +99,15 @@ export function AnnotationShape({ annotation: a, geometry }: { annotation: Annot
     }
     case 'ink':
       return (
-        <g opacity={a.opacity} fill="none" stroke={color} strokeWidth={a.width} strokeLinecap="round" strokeLinejoin="round">
+        <g
+          opacity={a.opacity}
+          fill="none"
+          stroke={color}
+          strokeWidth={a.width}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeDasharray={dashPattern(a.dash ?? 'solid', a.width).join(' ') || undefined}
+        >
           {a.paths.map((path, i) => (
             <polyline key={i} points={points(geometry, path)} />
           ))}

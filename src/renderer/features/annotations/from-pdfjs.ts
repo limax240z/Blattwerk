@@ -13,7 +13,7 @@ import type {
   Rgb,
   StatusEntry,
 } from '../../../shared/annotations';
-import { REVIEW_STATUSES } from '../../../shared/annotations';
+import { lineStyleOf, REVIEW_STATUSES } from '../../../shared/annotations';
 
 // Ausschnitt der pdf.js-Daten, den wir nutzen (pdf.js liefert untypisierte Objekte).
 export interface PdfjsAnnotationData {
@@ -34,7 +34,8 @@ export interface PdfjsAnnotationData {
   inkLists?: Array<ArrayLike<number>>;
   lineCoordinates?: ArrayLike<number>;
   lineEndings?: string[];
-  borderStyle?: { width?: number };
+  // style: 1 durchgehend, 2 gestrichelt (pdf.js-Konstanten)
+  borderStyle?: { width?: number; style?: number; dashArray?: number[] };
   name?: string;
   defaultAppearanceData?: { fontSize?: number; fontColor?: ArrayLike<number> | Record<string, number> };
 }
@@ -115,6 +116,7 @@ function convertOne(data: PdfjsAnnotationData, pageIndex: number): Annotation | 
         kind: 'ink',
         paths: (data.inkLists ?? []).map(toPath),
         width: data.borderStyle?.width ?? 1,
+        dash: data.borderStyle?.style === 2 ? lineStyleOf(data.borderStyle.dashArray, data.borderStyle.width ?? 1) : 'solid',
       };
     case 'Square':
     case 'Circle':

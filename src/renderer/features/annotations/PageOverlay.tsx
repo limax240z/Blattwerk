@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, FreeTextAnnotation, InkAnnotation, MarkupAnnotation, Point, Quad, Rect } from '../../../shared/annotations';
-import { boundsOf, normalizeRect } from '../../../shared/annotations';
+import { boundsOf, dashPattern, normalizeRect } from '../../../shared/annotations';
 import { ERASER_RADIUS_PX, erasePaths, pathsTouch, quadsTouch } from '../../../shared/eraser';
 import { CUSTOM_STAMP_COLORS, DRAWING_TOOLS as STORE_DRAWING_TOOLS, useAnnotations, type Tool } from '../../state/annotations-store';
 import { i18n } from '../../i18n';
@@ -22,6 +22,7 @@ import {
   appendInkStroke,
   createFreeText,
   createInk,
+  dotPath,
   createLine,
   createNote,
   createShape,
@@ -436,11 +437,12 @@ export function PageOverlay({
     const current = gestureRef.current;
     setGesture(null);
     if (!current) return;
-    const { colors, width, fontSize } = store();
+    const { colors, width, fontSize, dash } = store();
     switch (current.kind) {
       case 'ink': {
-        const path = current.snapped ?? simplifyPath(current.points);
-        if (path.length < 2) return;
+        // Klick ohne Ziehen setzt einen Punkt
+        const stroke = current.snapped ?? simplifyPath(current.points);
+        const path = stroke.length < 2 ? dotPath(stroke[0] ?? current.points[0] ?? { x: 0, y: 0 }) : stroke;
         const last = lastInk.get(tabId);
         const previous = last ? items.find((a) => a.id === last.id) : undefined;
         const now = time;
@@ -448,13 +450,14 @@ export function PageOverlay({
           previous?.kind === 'ink' &&
           last?.pageIndex === pageIndex &&
           now - last.time < INK_MERGE_MS &&
-          previous.width === width
+          previous.width === width &&
+          (previous.dash ?? 'solid') === dash
         ) {
           updateAnnotation(tabId, previous, appendInkStroke(previous, path));
           lastInk.set(tabId, { id: previous.id, pageIndex, time: now });
           return;
         }
-        const ink: InkAnnotation = createInk(baseFields(pageIndex), [path], colors.ink, width);
+        const ink: InkAnnotation = createInk(baseFields(pageIndex), [path], colors.ink, width, dash);
         addAnnotation(tabId, ink);
         lastInk.set(tabId, { id: ink.id, pageIndex, time: now });
         return;
@@ -609,6 +612,7 @@ function draftShape(gesture: Gesture, geometry: PageGeometry, settings: ReturnTy
           strokeWidth={width}
           strokeLinecap="round"
           strokeLinejoin="round"
+          strokeDasharray={dashPattern(settings.dash, width).join(' ') || undefined}
         />
       );
     case 'line': {

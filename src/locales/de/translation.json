@@ -498,6 +498,12 @@
     "color": "Farbe",
     "width": "Linienstärke",
     "widthValue": "{{value}} pt",
+    "lineStyle": {
+      "label": "Linienart",
+      "solid": "Durchgehend",
+      "dotted": "Gepunktet",
+      "dashed": "Gestrichelt"
+    },
     "snapShapes": "Formen erkennen: am Strichende kurz stillhalten macht eine saubere Linie, ein Rechteck oder eine Ellipse",
     "eraser": {
       "mode": {
