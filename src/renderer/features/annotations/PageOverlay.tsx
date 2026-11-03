@@ -33,6 +33,7 @@ import {
   simplifyPath,
 } from './create';
 import { dragRect, inkRect, isMovable, isResizable, lineRect, quadsFromRects, rectOfQuads, resizeFrom, translate } from './geometry';
+import { recognizeShape, SNAP_HOLD_MS, SNAP_JITTER_PX } from './shape-snap';
 import { caretAt, rangeBetween, type Caret } from './text-caret';
 import { rangeTextRects } from './text-selection';
 import styles from './PageOverlay.module.css';
@@ -41,7 +42,8 @@ import styles from './PageOverlay.module.css';
 type Gesture =
   | { kind: 'rect'; tool: 'square' | 'circle' | 'freetext' | 'redact'; from: Point; to: Point }
   | { kind: 'line'; tool: 'line' | 'arrow'; from: Point; to: Point }
-  | { kind: 'ink'; points: Point[] }
+  // snapped: erkannte Form, wenn der Stift am Ende still gehalten wurde (ersetzt den Freihandstrich)
+  | { kind: 'ink'; points: Point[]; snapped?: Point[] }
   // client: Zeigerlage beim Anfassen; während des Ziehens wird der Kommentar nur verschoben, nicht neu gezeichnet
   | { kind: 'move'; id: string; origin: Point; dx: number; dy: number; client: { x: number; y: number } }
   | { kind: 'resize'; id: string; fixed: Point; to: Point }
@@ -153,7 +155,26 @@ export function PageOverlay({
 
   const frame = useRef(0);
   const pointer = useRef({ x: 0, y: 0 });
+  // Stillhalten beim Zeichnen: Ruheposition des Stifts und Zeitgeber für die Formerkennung
+  const hold = useRef<{ timer: number; anchor: Point }>({ timer: 0, anchor: { x: 0, y: 0 } });
+  const stopHold = () => {
+    window.clearTimeout(hold.current.timer);
+    hold.current.timer = 0;
+  };
+  useEffect(() => stopHold, []);
+  const armHold = (anchor: Point) => {
+    stopHold();
+    hold.current.anchor = anchor;
+    hold.current.timer = window.setTimeout(() => {
+      hold.current.timer = 0;
+      const current = gestureRef.current;
+      if (current?.kind !== 'ink' || current.snapped || !store().snapShapes) return;
+      const snapped = recognizeShape(current.points);
+      if (snapped) setGesture({ ...current, snapped });
+    }, SNAP_HOLD_MS);
+  };
   const setGesture = (next: Gesture | null) => {
+    stopHold();
     // Die Verschiebung aus dem Ziehen gehört nicht React: vor dem nächsten Zeichnen wieder entfernen
     if (gestureRef.current?.kind === 'move') for (const group of svgRef.current?.querySelectorAll('[data-move-id]') ?? []) group.removeAttribute('transform');
     gestureRef.current = next;
@@ -259,6 +280,7 @@ export function PageOverlay({
       case 'ink':
         capture(event);
         setGesture({ kind: 'ink', points: [at] });
+        armHold(at);
         return;
       case 'eraser':
         capture(event);
@@ -374,8 +396,15 @@ export function PageOverlay({
     pointer.current = { x: event.clientX, y: event.clientY };
     switch (current.kind) {
       case 'ink': {
+        if (current.snapped) {
+          // Eine erkannte Gerade folgt dem Stift weiter (Endpunkt nachziehen), andere Formen bleiben stehen
+          if (current.snapped.length === 2) scheduleGesture({ ...current, snapped: [current.snapped[0] as Point, at] });
+          return;
+        }
         const coalesced = event.nativeEvent.getCoalescedEvents?.() ?? [];
         const added = coalesced.length > 0 ? coalesced.map((e) => toPdf(e)) : [at];
+        const anchor = hold.current.anchor;
+        if (Math.hypot(at.x - anchor.x, at.y - anchor.y) > pxToUnits(SNAP_JITTER_PX, scale)) armHold(at);
         scheduleGesture({ ...current, points: [...current.points, ...added] });
         return;
       }
@@ -410,7 +439,7 @@ export function PageOverlay({
     const { colors, width, fontSize } = store();
     switch (current.kind) {
       case 'ink': {
-        const path = simplifyPath(current.points);
+        const path = current.snapped ?? simplifyPath(current.points);
         if (path.length < 2) return;
         const last = lastInk.get(tabId);
         const previous = last ? items.find((a) => a.id === last.id) : undefined;
@@ -574,7 +603,7 @@ function draftShape(gesture: Gesture, geometry: PageGeometry, settings: ReturnTy
     case 'ink':
       return (
         <polyline
-          points={gesture.points.map((p) => geometry.toView(p).join(',')).join(' ')}
+          points={(gesture.snapped ?? gesture.points).map((p) => geometry.toView(p).join(',')).join(' ')}
           fill="none"
           stroke={css(colors.ink)}
           strokeWidth={width}
