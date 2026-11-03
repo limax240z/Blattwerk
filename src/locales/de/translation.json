@@ -498,6 +498,7 @@
     "color": "Farbe",
     "width": "Linienstärke",
     "widthValue": "{{value}} pt",
+    "snapShapes": "Formen erkennen: am Strichende kurz stillhalten macht eine saubere Linie, ein Rechteck oder eine Ellipse",
     "eraser": {
       "mode": {
         "pixel": "Pixel-Radierer: löscht nur den überstrichenen Teil",

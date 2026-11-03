@@ -8,6 +8,7 @@ import {
   MoveUpRight,
   PenLine,
   Redo2,
+  Shapes,
   Spline,
   Square,
   Stamp,
@@ -76,6 +77,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const stamp = useAnnotations((s) => s.stamp);
   const customText = useAnnotations((s) => s.customStamp.text);
   const eraser = useAnnotations((s) => s.eraser);
+  const snapShapes = useAnnotations((s) => s.snapShapes);
   const selected: Annotation | undefined = annotations?.items.find((a) => a.id === annotations.selectedId);
   const readOnly = !tab.canAnnotate;
 
@@ -86,6 +88,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
   const currentFontSize = selected?.kind === 'freetext' ? selected.fontSize : fontSize;
   const showColor = target !== null && target !== 'stamp' && target !== 'signature' && target !== 'eraser' && !readOnly;
   const showEraser = tool === 'eraser' && !selected && !readOnly;
+  const showSnap = tool === 'ink' && !selected && !readOnly;
   const showWidth = target !== null && WIDTH_KINDS.has(target) && !readOnly;
   const showFontSize = target === 'freetext' && !readOnly;
   const opacity = useAnnotations((s) => s.opacity);
@@ -184,7 +187,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
         ))}
       </div>
 
-      {(showColor || showWidth || showFontSize || showFill || showEraser || (tool === 'stamp' && !readOnly)) && <span className={styles.separator} />}
+      {(showColor || showWidth || showFontSize || showFill || showEraser || showSnap || (tool === 'stamp' && !readOnly)) && <span className={styles.separator} />}
 
       {showEraser && (
         <>
@@ -215,6 +218,16 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
             ))}
           </select>
         </>
+      )}
+
+      {showSnap && (
+        <IconButton
+          icon={Shapes}
+          label={t('comments.snapShapes')}
+          pressed={snapShapes}
+          onClick={() => useAnnotations.getState().setSnapShapes(!snapShapes)}
+          data-testid="snap-shapes"
+        />
       )}
 
       {showColor && (

@@ -117,6 +117,7 @@ interface AnnotationsState {
   customStamp: CustomStamp;
   pendingSignature: PendingSignature | null;
   eraser: { mode: EraserMode; size: EraserSize };
+  snapShapes: boolean;
   init: (tabId: string) => void;
   // Gesicherten Zustand eines Dokumentstands wiederherstellen (Rückgängig/Wiederholen von Seitenoperationen)
   restore: (tabId: string, tab: TabAnnotations) => void;
@@ -141,6 +142,8 @@ interface AnnotationsState {
   // Unterschrift zum Setzen wählen (schaltet das Werkzeug ein) oder verwerfen
   setPendingSignature: (signature: PendingSignature | null) => void;
   setEraser: (eraser: { mode: EraserMode; size: EraserSize }) => void;
+  // Formerkennung beim Stift (Stillhalten am Strichende macht eine saubere Form)
+  setSnapShapes: (on: boolean) => void;
 }
 
 function run(items: Annotation[], command: Command): Annotation[] {
@@ -200,6 +203,7 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     customStamp: { text: '', date: true, name: true, color: 'blue' },
     pendingSignature: null,
     eraser: { mode: 'pixel', size: 'medium' },
+    snapShapes: true,
     init: (tabId) => set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...EMPTY } } })),
     restore: (tabId, tab) =>
       set((state) => ({ tabs: { ...state.tabs, [tabId]: { ...tab, loaded: true, editingId: null } } })),
@@ -267,6 +271,7 @@ export const useAnnotations = create<AnnotationsState>((set) => {
     setCustomStamp: (customStamp) => set({ customStamp }),
     setStamp: (stamp) => set({ stamp }),
     setEraser: (eraser) => set({ eraser }),
+    setSnapShapes: (snapShapes) => set({ snapShapes }),
     setPendingSignature: (pendingSignature) =>
       set((state) => ({ pendingSignature, tool: pendingSignature ? 'signature' : state.tool === 'signature' ? 'select' : state.tool })),
   };
