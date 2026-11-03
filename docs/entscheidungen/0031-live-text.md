@@ -12,10 +12,11 @@ oder ein Scan ist. Bisher ging das erst nach „Text erkennen“ (ADR 0015) von 
 - **Automatisch und ohne die Datei zu ändern** (wie „Live Text“ unter macOS): Sichtbare Seiten werden im Hintergrund
   geprüft (`features/live-text/live-text.ts`). Erkannt wird, wenn die Seite weniger als 20 Zeichen echten Text hat oder
   Bilder mindestens 10 % der Fläche bedecken (`imageCoverage` aus der Befehlsliste von pdf.js, mit Transformationsmatrix).
-  So zählen auch Mischseiten (Text mit eingeklebtem Foto) und Text als Kurven.
-- Gezeichnet mit pdf.js (300 dpi, höchstens 5000 Bildpunkte Kantenlänge, ohne Anmerkungen), erkannt mit der vorhandenen
+  So zählen auch Mischseiten (Text mit eingeklebtem Foto) und Text als Kurven. Die Erkennung beginnt erst, wenn die Seite
+  1,5 s ruhig im Fenster steht: Beim Öffnen und Blättern bleibt die Rechenzeit bei der Bedienung.
+- Gezeichnet mit pdf.js (300 dpi, höchstens 3000 Bildpunkte Kantenlänge, ohne Anmerkungen), erkannt mit der vorhandenen
   Engine (tesseract.js, Deutsch und Englisch). Ein Auftrag nach dem anderen; Seiten, die bis zum Start nicht mehr zu sehen
-  sind, werden übersprungen. Die Engine endet 30 s nach dem letzten Auftrag. Ergebnis je Dokumentstand und Seite im
+  sind, werden übersprungen. Braucht eine Seite länger als 20 s (Rauschen, Muster), wird die Engine beendet und die Seite bleibt ohne Live-Text. Die Engine endet 30 s nach dem letzten Auftrag. Ergebnis je Dokumentstand und Seite im
   Speicher (`WeakMap` am `PDFDocumentProxy`); nach Änderungen am Inhalt wird neu erkannt.
 - Wörter, die zum großen Teil über echtem Text liegen (`mostlyInside`), entfallen: Dort gibt es schon etwas zum Auswählen.
 - **Ebene wie die von pdf.js** (`layer.ts`): `div.textLayer[data-live-text]` direkt hinter der Textebene von pdf.js,

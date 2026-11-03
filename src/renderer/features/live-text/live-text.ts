@@ -23,8 +23,10 @@ export interface LiveLine {
 // Seiten, auf denen Bilder mindestens so viel Fläche bedecken, werden auch mit vorhandenem Text erkannt (Mischseiten)
 export const IMAGE_COVERAGE = 0.1;
 const DPI = 300;
-// Größte Kantenlänge des Bildes für die Erkennung (Plakate, sehr große Seiten)
-const MAX_SIDE = 5000;
+// Größte Kantenlänge des Bildes für die Erkennung (A4 mit gut 250 dpi; Plakate, sehr große Seiten)
+const MAX_SIDE = 3000;
+// Länger rechnet die Erkennung an einer Seite nicht (Rauschen, Muster): dann ohne Live-Text weiter
+const RECOGNIZE_TIMEOUT_MS = 20_000;
 // Erkennung beenden, wenn so lange nichts zu tun war (gibt den Speicher der Sprachdaten frei)
 const IDLE_MS = 30_000;
 
@@ -139,7 +141,21 @@ async function recognize(page: PDFPageProxy, native: Rect[]): Promise<LiveLine[]
     canvas.width = 0;
     canvas.height = 0;
   }
-  const blocks = await (await acquireEngine()).recognize(pgm);
+  const ocr = await acquireEngine();
+  let timer = 0;
+  const timeout = new Promise<null>((resolve) => {
+    timer = window.setTimeout(() => resolve(null), RECOGNIZE_TIMEOUT_MS);
+  });
+  const blocks = await Promise.race([ocr.recognize(pgm), timeout]);
+  window.clearTimeout(timer);
+  if (blocks === null) {
+    // Die laufende Erkennung lässt sich nur mit der ganzen Engine beenden
+    if (engine) {
+      engine = null;
+      void ocr.stop().catch(() => undefined);
+    }
+    return [];
+  }
   const toPdf = (x: number, y: number): Point => {
     const [px = 0, py = 0] = viewport.convertToPdfPoint(x, y);
     return { x: px, y: py };
