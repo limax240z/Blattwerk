@@ -10,6 +10,8 @@ export interface SourceFile {
   password: string | null;
   pageCount: number;
   image: ImageInfo | null;
+  // Seitenauswahl im Dialog „Dateien zusammenführen“, wie eingegeben (leer = alle Seiten)
+  selection?: string;
 }
 
 // Offener Dialog für Seitenoperationen (Seiten 0-basiert)

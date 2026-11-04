@@ -1,7 +1,7 @@
 import { ArrowDown, ArrowUp, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { chunkPages, formatPageRanges, parsePageRanges, splitAtPages, type Margins } from '../../../shared/pages';
+import { chunkPages, formatPageRanges, pageSelection, parsePageRanges, splitAtPages, type Margins } from '../../../shared/pages';
 import { Dialog, DialogButton } from '../../components/Dialog';
 import { IconButton } from '../../components/IconButton';
 import { getRuntime } from '../../engine/runtime';
@@ -503,18 +503,25 @@ export function CombineDialog({ sources }: { sources: SourceFile[] }) {
     const added = await pickSources('pdf-or-images');
     if (added) set([...(useUi.getState().combine ?? []), ...added]);
   };
+  const choose = (index: number, selection: string) => set(sources.map((source, i) => (i === index ? { ...source, selection } : source)));
+  // Seiten einer Datei im neuen Dokument; false bei ungültiger Angabe
+  const chosen = (source: SourceFile) => pageSelection(source.selection ?? '', source.pageCount);
+  const invalid = sources.some((source) => chosen(source) === false);
   const submit = () => {
-    if (sources.length === 0) return;
+    if (sources.length === 0 || invalid) return;
     set(null);
     void combineSources(sources, t('pages.names.combined'));
   };
-  const total = sources.reduce((sum, s) => sum + s.pageCount, 0);
+  const total = sources.reduce((sum, source) => {
+    const pages = chosen(source);
+    return sum + (pages ? pages.length : source.pageCount);
+  }, 0);
   return (
     <Dialog
       title={t('pages.dialog.combineTitle')}
       onClose={() => set(null)}
       onSubmit={submit}
-      width={480}
+      width={560}
       testId="combine-dialog"
       actions={
         <>
@@ -522,7 +529,7 @@ export function CombineDialog({ sources }: { sources: SourceFile[] }) {
             {t('pages.dialog.addFiles')}
           </DialogButton>
           <DialogButton onClick={() => set(null)}>{t('pages.dialog.cancel')}</DialogButton>
-          <DialogButton type="submit" primary disabled={sources.length === 0} testId="combine-ok">
+          <DialogButton type="submit" primary disabled={sources.length === 0 || invalid} testId="combine-ok">
             {t('pages.dialog.combine')}
           </DialogButton>
         </>
@@ -539,6 +546,17 @@ export function CombineDialog({ sources }: { sources: SourceFile[] }) {
                 <span className={styles.fileMeta}>
                   {source.kind === 'pdf' ? t('pages.dialog.pageCount', { count: source.pageCount }) : t('pages.dialog.image')}
                 </span>
+                {source.kind === 'pdf' && (
+                  <input
+                    className={[fieldStyles.input, styles.fileRange].join(' ')}
+                    value={source.selection ?? ''}
+                    placeholder={t('pages.dialog.combineAll')}
+                    aria-label={t('pages.dialog.combinePages', { name: source.name })}
+                    aria-invalid={chosen(source) === false}
+                    onChange={(event) => choose(i, event.target.value)}
+                    data-testid="combine-pages"
+                  />
+                )}
                 <IconButton icon={ArrowUp} size={14} label={t('pages.dialog.moveUp')} disabled={i === 0} onClick={() => move(i, -1)} />
                 <IconButton
                   icon={ArrowDown}
@@ -551,7 +569,13 @@ export function CombineDialog({ sources }: { sources: SourceFile[] }) {
               </li>
             ))}
           </ul>
-          <p className={fieldStyles.hint}>{t('pages.dialog.combineSummary', { count: total })}</p>
+          {invalid ? (
+            <p className={fieldStyles.error} role="alert" data-testid="combine-invalid">
+              {t('pages.dialog.combineInvalid')}
+            </p>
+          ) : (
+            <p className={fieldStyles.hint}>{t('pages.dialog.combineSummary', { count: total })}</p>
+          )}
         </>
       )}
     </Dialog>

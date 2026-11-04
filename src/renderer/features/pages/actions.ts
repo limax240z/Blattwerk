@@ -2,7 +2,7 @@
 // extrahieren, teilen, Dateien zusammenführen und Bilder in PDF umwandeln.
 import type { FileInfo, SaveNewResult, SaveToFolderResult } from '../../../shared/ipc';
 import type { ComposePart, ImageSource, Margins, PageOperation } from '../../../shared/pages';
-import { formatPageRanges, moveTarget } from '../../../shared/pages';
+import { formatPageRanges, moveTarget, pageSelection } from '../../../shared/pages';
 import { readImageInfo } from '../../../shared/image-info';
 import { api } from '../../api';
 import { readChunked } from '../../engine/file-reader';
@@ -302,7 +302,7 @@ export async function splitDocument(tab: TabState, chunks: number[][]): Promise<
 export async function combineSources(sources: SourceFile[], name: string): Promise<boolean> {
   try {
     return await busy('pages.busy.combining', async () => {
-      const output = await composeDocument(sources.map((source) => composePart(source)));
+      const output = await composeDocument(sources.map((source) => composePart(source, pageSelection(source.selection ?? '', source.pageCount) || null)));
       return reportSaveNew(await api.saveNewFile(output, name, null, true));
     });
   } catch (error) {

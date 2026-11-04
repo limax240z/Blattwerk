@@ -13,6 +13,7 @@ const version = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8')
 const repository = /UPDATE_REPOSITORY = '([^']+)'/.exec(readFileSync(path.join(root, 'src/shared/product.ts'), 'utf8'))?.[1];
 if (!repository) throw new Error('UPDATE_REPOSITORY nicht gefunden');
 const tag = `v${version}`;
+const UPLOAD_ATTEMPTS = 4;
 
 const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 const dirty = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim();
@@ -43,27 +44,36 @@ try {
   }
   if (files.length !== 4) throw new Error(`Erwartet 4 Mac-Dateien, gefunden: ${files.join(', ')}`);
 
-  let existing = null;
-  try {
-    existing = execFileSync('gh', ['release', 'view', tag, '--repo', repository, '--json', 'assets', '--jq', '.assets[].name'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-      .split('\n')
-      .filter(Boolean);
-  } catch {
-    // Release gibt es noch nicht
-  }
-  const paths = files.map((name) => path.join(outDir, name));
-  if (existing === null) {
+  const gh = (args) => execFileSync('gh', [...args, '--repo', repository], { stdio: 'inherit' });
+  const assets = () => {
+    try {
+      return execFileSync('gh', ['release', 'view', tag, '--repo', repository, '--json', 'assets', '--jq', '.assets[].name'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+        .split('\n')
+        .filter(Boolean);
+    } catch {
+      return null;
+    }
+  };
+  if (assets() === null) {
     const sha = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
-    execFileSync(
-      'gh',
-      ['release', 'create', tag, ...paths, '--repo', repository, '--title', `Blattwerk ${version}`, '--notes', `Automatisch gebaut aus ${sha}. Updates lädt Blattwerk über „Nach Updates suchen …“ selbst.`],
-      { stdio: 'inherit' },
-    );
-  } else {
-    for (const file of paths.filter((file) => !existing.includes(path.basename(file)))) {
-      execFileSync('gh', ['release', 'upload', tag, file, '--repo', repository], { stdio: 'inherit' });
+    gh(['release', 'create', tag, '--draft', '--title', `Blattwerk ${version}`, '--notes', `Automatisch gebaut aus ${sha}. Updates lädt Blattwerk über „Nach Updates suchen …“ selbst.`]);
+  }
+  // Einzeln und mit Wiederholung: GitHub bricht große Uploads gern mit HTTP 408 ab, und mehrere zugleich gehen öfter schief.
+  // Ein Abbruch hinterlässt eine unvollständige Datei; --clobber ersetzt sie.
+  for (const name of files) {
+    for (let attempt = 1; ; attempt++) {
+      if (assets()?.includes(name)) break;
+      try {
+        gh(['release', 'upload', tag, path.join(outDir, name), '--clobber']);
+        break;
+      } catch (error) {
+        if (attempt >= UPLOAD_ATTEMPTS) throw error;
+        console.error(`${name}: Versuch ${attempt} fehlgeschlagen, neuer Versuch`);
+      }
     }
   }
+  // Erst jetzt sichtbar (ein Entwurf, den CI schon um die Windows-Datei ergänzt hat, bleibt derselbe)
+  gh(['release', 'edit', tag, '--draft=false']);
   console.log(`Mac-Dateien für ${tag} in ${repository}: ${files.join(', ')}`);
 } finally {
   rmSync(outDir, { recursive: true, force: true });

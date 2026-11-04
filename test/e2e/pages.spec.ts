@@ -276,6 +276,32 @@ test.describe('Seiten organisieren', () => {
     await handle.close();
   });
 
+  test('Dateien zusammenführen: nur ausgewählte Seiten, ungültige Angaben sperren den Knopf', async () => {
+    const dir = tempDir();
+    const target = path.join(dir, 'teile.pdf');
+    const handle = await launchApp([], { userData: dir });
+    const { page, app } = handle;
+    await stubDialogs(app, [[fixture('text.pdf'), fixture('text.pdf'), imageFixture('foto.jpg')]], [target]);
+    await menuClick(app, 'file.combine');
+    await page.getByTestId('combine-add').click();
+    await expect(page.getByTestId('combine-entry')).toHaveCount(3);
+    // Bilder haben keine Seitenauswahl
+    const fields = page.getByTestId('combine-pages');
+    await expect(fields).toHaveCount(2);
+    await fields.nth(0).fill('2-3');
+    await expect(page.getByTestId('combine-dialog')).toContainText('15 Seiten');
+    await fields.nth(1).fill('99');
+    await expect(page.getByTestId('combine-invalid')).toBeVisible();
+    await expect(page.getByTestId('combine-ok')).toBeDisabled();
+    await fields.nth(1).fill('1, 12');
+    await expect(page.getByTestId('combine-dialog')).toContainText('5 Seiten');
+    await page.getByTestId('combine-ok').click();
+    await waitForDocument(page, 5);
+    // Seitenzahlen in der Fußzeile von text.pdf: 2, 3 aus der ersten, 1, 12 aus der zweiten Datei, dann das Bild
+    expect(await footers(target)).toEqual([2, 3, 1, 12, null]);
+    await handle.close();
+  });
+
   test('PDF aus Bildern erstellen', async () => {
     const dir = tempDir();
     const target = path.join(dir, 'bilder.pdf');
