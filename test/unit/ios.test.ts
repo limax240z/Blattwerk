@@ -11,6 +11,7 @@ const state = {
   canPrint: true,
   viewMode: 'continuous' as const,
   sidebarVisible: true,
+  readMode: false,
   rightPanelVisible: false,
   tabCount: 2,
   dirtyCount: 0,

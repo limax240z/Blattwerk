@@ -85,6 +85,7 @@ const EMPTY_MENU_STATE: MenuState = {
   canPrint: false,
   viewMode: null,
   sidebarVisible: true,
+  readMode: false,
   rightPanelVisible: false,
   tabCount: 0,
   dirtyCount: 0,

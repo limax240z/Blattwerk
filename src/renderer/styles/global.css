@@ -108,6 +108,19 @@ input:is([type='radio'], [type='checkbox']):focus-visible {
   user-select: text;
 }
 
+/* Lesemodus: Leisten weg, Formularfelder nehmen die Maus nicht an (Links schon) */
+[data-read-mode] [data-read-chrome] {
+  display: none;
+}
+
+[data-read-chrome] {
+  display: contents;
+}
+
+[data-read-mode] .annotationLayer :is(input, textarea, select, button, [contenteditable]) {
+  pointer-events: none;
+}
+
 /* Trefferfarben der Suche an das eigene Design anpassen */
 .pdfViewer .textLayer .highlight {
   --highlight-bg-color: var(--color-match);

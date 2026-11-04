@@ -100,6 +100,7 @@ describe('validateMenuState', () => {
     canPrint: false,
     viewMode: 'two-page',
     sidebarVisible: true,
+    readMode: false,
     rightPanelVisible: false,
     tabCount: 2,
     dirtyCount: 1,

@@ -16,7 +16,7 @@ import { addAnnotation, baseFields, hideDomAnnotations, updateAnnotation } from 
 import { css } from './AnnotationShape';
 import { createInk, createMarkup, createRedaction, MARKER_OPACITY, MARKER_WIDTH, simplifyPath } from './create';
 import { useLiveText } from '../live-text/useLiveText';
-import { isMovable, quadsFromRects, translate } from './geometry';
+import { clipPath, isMovable, pageRect, quadsFromRects, translate } from './geometry';
 import styles from './PageOverlay.module.css';
 import { PageOverlay } from './PageOverlay';
 import { followSelectionDrag, repairTextOrder } from './selection-drag';
@@ -124,7 +124,7 @@ function showMarkerPreview(tabId: string, container: HTMLElement, trace: MarkerT
     svg.setAttribute('viewBox', `0 0 ${geometry.width} ${geometry.height}`);
     svg.setAttribute('preserveAspectRatio', 'none');
     svg.setAttribute('style', 'position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none');
-    const line = document.createElementNS(ns, 'polyline');
+    const line = document.createElementNS(ns, 'path');
     line.setAttribute('fill', 'none');
     line.setAttribute('stroke', css(useAnnotations.getState().colors.highlight));
     line.setAttribute('stroke-width', String(MARKER_WIDTH));
@@ -136,7 +136,8 @@ function showMarkerPreview(tabId: string, container: HTMLElement, trace: MarkerT
     trace.preview = svg;
   }
   trace.preview.style.display = visible ? '' : 'none';
-  trace.preview.firstElementChild?.setAttribute('points', trace.points.map((p) => geometry.toView(p).join(',')).join(' '));
+  const runs = clipPath(trace.points, pageRect(geometry)).map((run) => `M${run.map((p) => geometry.toView(p).join(' ')).join('L')}`);
+  trace.preview.firstElementChild?.setAttribute('d', runs.join(''));
 }
 
 // Seitengeometrie (Maßstab 1, mit Drehung) für Markierungen aus der Textauswahl, auch ohne gerenderte Ebene.
@@ -152,7 +153,8 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
   const tool = useAnnotations((s) => s.tool);
   const rotation = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.rotation ?? 0);
   const scale = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.scale ?? 1);
-  const canAnnotate = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.canAnnotate ?? false);
+  const readMode = useUi((s) => s.readMode);
+  const canAnnotate = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.canAnnotate ?? false) && !readMode;
   // Modus „Formular bearbeiten“: Kommentare bleiben sichtbar, reagieren aber nicht auf die Maus.
   const formEditing = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.formEditing ?? false);
   const contentEditing = useDocuments((s) => s.tabs.find((t) => t.id === tabId)?.contentEditing ?? false);
@@ -314,8 +316,10 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
         if (markupSelection(tabId, tool, (page) => cachedGeometry(tabId, page))) return;
         if (drawn && drawn.distance >= MARKER_MIN_DISTANCE_PX) {
           const color = useAnnotations.getState().colors.highlight;
-          const ink = createInk(baseFields(drawn.pageIndex), [simplifyPath(drawn.points)], color, MARKER_WIDTH);
-          addAnnotation(tabId, { ...ink, opacity: MARKER_OPACITY });
+          const geometry = cachedGeometry(tabId, drawn.pageIndex);
+          const paths = geometry ? clipPath(simplifyPath(drawn.points), pageRect(geometry)) : [];
+          if (paths.length === 0) return;
+          addAnnotation(tabId, { ...createInk(baseFields(drawn.pageIndex), paths, color, MARKER_WIDTH), opacity: MARKER_OPACITY });
           window.getSelection()?.removeAllRanges();
           if (useUi.getState().markToolsVisible) useAnnotations.getState().select(tabId, null);
           return;

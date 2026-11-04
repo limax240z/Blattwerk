@@ -29,6 +29,7 @@ export const COMMANDS = [
   'view.toggleSidebar',
   'view.toggleRightPanel',
   'view.toggleCommentTools',
+  'view.readMode',
   'pages.organize',
   'pages.rotateClockwise',
   'pages.rotateCounterClockwise',
@@ -79,6 +80,24 @@ export const COMMANDS = [
 ] as const;
 
 export type CommandId = (typeof COMMANDS)[number];
+
+// Im Lesemodus nur Ansehen und Blättern; alles andere bleibt wirkungslos, auch über Menü und Tastenkürzel
+export const READ_MODE_COMMANDS: readonly CommandId[] = [
+  'view.readMode',
+  'view.zoomIn',
+  'view.zoomOut',
+  'view.fitPage',
+  'view.actualSize',
+  'view.fitWidth',
+  'view.modeSingle',
+  'view.modeContinuous',
+  'view.modeTwoPage',
+  'view.modeTwoPageContinuous',
+  'nav.firstPage',
+  'nav.previousPage',
+  'nav.nextPage',
+  'nav.lastPage',
+];
 
 export function isCommandId(value: unknown): value is CommandId {
   return typeof value === 'string' && (COMMANDS as readonly string[]).includes(value);

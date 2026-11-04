@@ -1,0 +1,26 @@
+/* Knopf zum Beenden des Lesemodus: unten in der Mitte, verschwindet, solange die Maus ruht */
+.exit {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  font: inherit;
+  color: var(--color-text);
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-outline), var(--glass-shadow);
+  transform: translateX(-50%);
+  transition: opacity 200ms ease;
+  cursor: pointer;
+}
+
+.hidden {
+  opacity: 0;
+}

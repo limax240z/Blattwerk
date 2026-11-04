@@ -650,6 +650,7 @@ export function createIosApi(): BlattwerkApi {
     providePages: () => undefined,
     setTabDragHoverState: () => undefined,
     closeWindow: () => undefined,
+    setFullscreen: async () => false,
     // Rückfrage wie auf dem Mac (src/main/security.ts): Host in Punycode, genau diese Adresse öffnen
     openExternal: async (url) => {
       if (!isAllowedExternalUrl(url)) return false;

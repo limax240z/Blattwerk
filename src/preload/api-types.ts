@@ -139,6 +139,8 @@ export interface BlattwerkApi {
   setTabDragHoverState(state: TabDragHoverState): void;
   // Fenster schließen, nachdem sein letzter Tab weitergegeben wurde
   closeWindow(): void;
+  // Vollbild ein oder aus; liefert, ob das Fenster vorher schon im Vollbild war
+  setFullscreen(on: boolean): Promise<boolean>;
   openExternal(url: string): Promise<boolean>;
   setMenuState(state: MenuState): void;
   // Glasflächen für Apples Liquid Glass (nur wirksam, wenn appInfo().nativeGlass)

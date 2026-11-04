@@ -62,7 +62,7 @@ export function validateMenuState(value: unknown): MenuState | null {
   if (typeof value !== 'object' || value === null) return null;
   const v = value as Record<string, unknown>;
   const bool = (x: unknown) => typeof x === 'boolean';
-  const flags = ['hasDocument', 'canPrint', 'sidebarVisible', 'rightPanelVisible', 'canUndo', 'canRedo', 'activeDirty', 'commentToolsVisible', 'organizeMode', 'canAssemble', 'canExtract', 'formEditing', 'canEditForms', 'redactToolsVisible', 'hasRedactionMarks', 'contentEditing', 'markToolsVisible'];
+  const flags = ['hasDocument', 'canPrint', 'sidebarVisible', 'readMode', 'rightPanelVisible', 'canUndo', 'canRedo', 'activeDirty', 'commentToolsVisible', 'organizeMode', 'canAssemble', 'canExtract', 'formEditing', 'canEditForms', 'redactToolsVisible', 'hasRedactionMarks', 'contentEditing', 'markToolsVisible'];
   if (!flags.every((key) => bool(v[key]))) return null;
   if (!isNonNegativeInt(v.tabCount) || !isNonNegativeInt(v.dirtyCount)) return null;
   if (v.viewMode !== null && !VIEW_MODES.includes(v.viewMode as ViewMode)) return null;
@@ -70,6 +70,7 @@ export function validateMenuState(value: unknown): MenuState | null {
     hasDocument: v.hasDocument as boolean,
     canPrint: v.canPrint as boolean,
     sidebarVisible: v.sidebarVisible as boolean,
+    readMode: v.readMode as boolean,
     rightPanelVisible: v.rightPanelVisible as boolean,
     tabCount: v.tabCount,
     viewMode: v.viewMode as ViewMode | null,

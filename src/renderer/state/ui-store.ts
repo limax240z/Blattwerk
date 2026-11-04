@@ -44,6 +44,8 @@ export interface PrintProgress {
 
 interface UiState {
   sidebarVisible: boolean;
+  // Lesemodus (features/read-mode): nur das Dokument, keine Änderungen
+  readMode: boolean;
   rightPanelVisible: boolean;
   propertiesTabId: string | null;
   goToPageOpen: boolean;
@@ -88,6 +90,7 @@ interface UiState {
   // Dialog für Unterschriften: Auswahl gespeicherter oder neue anlegen
   signatureDialog: 'choose' | 'create' | null;
   setSidebarVisible: (visible: boolean) => void;
+  setReadMode: (on: boolean) => void;
   setRightPanelVisible: (visible: boolean) => void;
   openProperties: (tabId: string | null) => void;
   setGoToPageOpen: (open: boolean) => void;
@@ -140,6 +143,7 @@ let nextNoticeId = 1;
 
 export const useUi = create<UiState>((set) => ({
   sidebarVisible: true,
+  readMode: false,
   rightPanelVisible: false,
   propertiesTabId: null,
   goToPageOpen: false,
@@ -171,6 +175,7 @@ export const useUi = create<UiState>((set) => ({
   fileDropInsert: false,
   signatureDialog: null,
   setSidebarVisible: (sidebarVisible) => set({ sidebarVisible }),
+  setReadMode: (readMode) => set({ readMode }),
   setRightPanelVisible: (rightPanelVisible) => set({ rightPanelVisible }),
   openProperties: (propertiesTabId) => set({ propertiesTabId }),
   setGoToPageOpen: (goToPageOpen) => set({ goToPageOpen }),

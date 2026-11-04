@@ -96,6 +96,7 @@ const api: BlattwerkApi = {
   confirmClose: () => ipcRenderer.send(IPC.closeConfirmed),
   cancelClose: () => ipcRenderer.send(IPC.closeCancelled),
   closeWindow: () => ipcRenderer.send(IPC.closeWindow),
+  setFullscreen: (on) => ipcRenderer.invoke(IPC.windowFullscreen, on),
   transferTab: (fileId, transfer, destination) => ipcRenderer.invoke(IPC.tabTransfer, fileId, transfer, destination),
   onTabReceived: (listener) =>
     subscribe(IPC.tabReceived, (p) => (typeof p === 'object' && p !== null ? (p as TabReceived) : null), listener),

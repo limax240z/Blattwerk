@@ -177,6 +177,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
         ],
       },
       { type: 'separator' },
+      cmd('view.readMode', t('menu.view.readMode'), { type: 'checkbox', checked: state.readMode, enabled: state.hasDocument }),
       cmd('view.toggleSidebar', t('menu.view.toggleSidebar'), {
         type: 'checkbox',
         checked: viewing && state.sidebarVisible,

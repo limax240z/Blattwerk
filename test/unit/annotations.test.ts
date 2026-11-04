@@ -17,7 +17,7 @@ import {
   type Base,
 } from '../../src/renderer/features/annotations/create';
 import { convertPageAnnotations, pdfText, toQuads, type PdfjsAnnotationData } from '../../src/renderer/features/annotations/from-pdfjs';
-import { dragRect, isMovable, isResizable, quadsFromRects, translate } from '../../src/renderer/features/annotations/geometry';
+import { clampToRect, clipPath, dragRect, isMovable, isResizable, pageRect, quadsFromRects, translate } from '../../src/renderer/features/annotations/geometry';
 import { isDirty, useAnnotations } from '../../src/renderer/state/annotations-store';
 
 const red = { r: 1, g: 0, b: 0 };
@@ -291,5 +291,32 @@ describe('PDF-Datum', () => {
     expect(parsePdfDate('D:20260115093000Z')?.toISOString()).toBe('2026-01-15T09:30:00.000Z');
     expect(parsePdfDate('D:2026')?.getFullYear()).toBe(2026);
     expect(parsePdfDate('kein Datum')).toBeNull();
+  });
+});
+
+describe('Zeichnen endet am Seitenrand', () => {
+  const page: Rect = [0, 0, 100, 100];
+
+  it('lässt Striche innerhalb der Seite unverändert', () => {
+    const path = [{ x: 10, y: 10 }, { x: 50, y: 60 }, { x: 90, y: 20 }];
+    expect(clipPath(path, page)).toEqual([path]);
+  });
+
+  it('schneidet am Rand ab und lässt nichts außerhalb stehen', () => {
+    expect(clipPath([{ x: 50, y: 50 }, { x: 150, y: 50 }], page)).toEqual([[{ x: 50, y: 50 }, { x: 100, y: 50 }]]);
+    expect(clipPath([{ x: 200, y: 50 }, { x: 300, y: 50 }], page)).toEqual([]);
+  });
+
+  it('hinaus und wieder hinein ergibt zwei Stücke', () => {
+    const runs = clipPath([{ x: 50, y: 90 }, { x: 50, y: 120 }, { x: 80, y: 120 }, { x: 80, y: 90 }], page);
+    expect(runs).toEqual([
+      [{ x: 50, y: 90 }, { x: 50, y: 100 }],
+      [{ x: 80, y: 100 }, { x: 80, y: 90 }],
+    ]);
+  });
+
+  it('Seitenrechteck und Begrenzen eines Punkts', () => {
+    expect(pageRect({ width: 100, height: 200, toPdf: (x, y) => ({ x, y: 200 - y }) })).toEqual([0, 0, 100, 200]);
+    expect(clampToRect({ x: -5, y: 300 }, [0, 0, 100, 200])).toEqual({ x: 0, y: 200 });
   });
 });

@@ -30,6 +30,7 @@ export function computeMenuState(): MenuState {
     canPrint: ready && active.canPrint,
     viewMode: ready ? active.viewMode : null,
     sidebarVisible: ui.sidebarVisible,
+    readMode: ui.readMode,
     rightPanelVisible: ui.rightPanelVisible,
     tabCount: tabs.length,
     dirtyCount: tabs.filter((tab) => isDirtyState(annotations[tab.id], histories[tab.id], forms[tab.id])).length,
