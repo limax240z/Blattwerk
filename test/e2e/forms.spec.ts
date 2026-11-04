@@ -398,7 +398,8 @@ test('Lesemodus: nur das Dokument, nichts lässt sich ändern, Esc stellt alles 
   await expect(page.getByTestId('open-button')).toBeHidden();
   await expect(page.getByTestId('left-sidebar')).toHaveCount(0);
 
-  // Formularfeld: weder Klick noch Tippen noch direkter Fokus
+  // Formularfeld: weder Klick noch Tippen noch direkter Fokus (die Seite wird für den Lesemodus neu aufgebaut)
+  await expect(firstField).toBeVisible();
   const box = await firstField.boundingBox();
   if (!box) throw new Error('Feld nicht sichtbar');
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);

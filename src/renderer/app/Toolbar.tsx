@@ -453,7 +453,8 @@ export function Toolbar() {
       }}
     >
       <GlassGroup>
-        {ready && (
+        {/* Sonst die Lasche am Dokumentrand (SidebarToggle), die in der Kompaktansicht fehlt */}
+        {ready && compact && (
           <IconButton
             icon={PanelLeft}
             label={t('toolbar.sidebar')}
