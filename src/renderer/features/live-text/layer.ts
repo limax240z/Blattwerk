@@ -61,4 +61,8 @@ export function fillLiveTextLayer(layer: HTMLElement, lines: LiveLine[], geometr
     });
     layer.append(document.createElement('br'));
   }
+  // Deckt beim Ziehen die Lücken ab (siehe annotations/selection-drag.ts), wie in der Textebene von pdf.js
+  const end = document.createElement('div');
+  end.className = 'endOfContent';
+  layer.append(end);
 }

@@ -19,6 +19,7 @@ import { useLiveText } from '../live-text/useLiveText';
 import { isMovable, quadsFromRects, translate } from './geometry';
 import styles from './PageOverlay.module.css';
 import { PageOverlay } from './PageOverlay';
+import { followSelectionDrag, repairTextOrder } from './selection-drag';
 import { selectedTextRects } from './text-selection';
 
 // Pfeiltaste → Richtung in der Ansicht (x nach rechts, y nach unten)
@@ -220,12 +221,18 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
     const onAnnotationLayer = (event: { source?: { div?: HTMLElement } }) => {
       if (event.source?.div) hideDomAnnotations(tabId, event.source.div);
     };
+    const onTextLayer = (event: { source?: { div?: HTMLElement } }) => {
+      const layer = event.source?.div?.querySelector(':scope > .textLayer:not([data-live-text])');
+      if (layer) repairTextOrder(layer);
+    };
     runtime.eventBus.on('pagesinit', setup);
     runtime.eventBus.on('annotationlayerrendered', onAnnotationLayer);
+    runtime.eventBus.on('textlayerrendered', onTextLayer);
     setup();
     return () => {
       runtime.eventBus.off('pagesinit', setup);
       runtime.eventBus.off('annotationlayerrendered', onAnnotationLayer);
+      runtime.eventBus.off('textlayerrendered', onTextLayer);
       intersection?.disconnect();
       mutation?.disconnect();
       for (const host of hosts.values()) host.remove();
@@ -288,8 +295,7 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
       trace.distance += Math.hypot(event.clientX - trace.last.x, event.clientY - trace.last.y);
       trace.last = { x: event.clientX, y: event.clientY };
       // Wird dabei Text ausgewählt, zeigt die Auswahl schon, was markiert wird
-      const selection = window.getSelection();
-      const selecting = !!selection && !selection.isCollapsed && selection.toString().trim() !== '';
+      const selecting = window.getSelection()?.isCollapsed === false;
       if (trace.distance >= MARKER_MIN_DISTANCE_PX) showMarkerPreview(tabId, container, trace, !selecting);
     };
     const onPointerUp = (event: PointerEvent) => {
@@ -364,6 +370,12 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [active, tabId, canAnnotate]);
+
+  // Textauswahl über mehrere Zeilen: In den Lücken folgt sie der nächsten Textstelle
+  useEffect(() => {
+    const container = getRuntime(tabId)?.container;
+    return container ? followSelectionDrag(container) : undefined;
+  }, [tabId, pagesReady]);
 
   // Klick neben einen Kommentar hebt die Auswahl auf. Klicks auf der eigenen Ebene (Kommentar, Griff,
   // Zeichenwerkzeug) behandelt diese selbst; React meldet sie dort früher, weil es auch an Portalen lauscht.
