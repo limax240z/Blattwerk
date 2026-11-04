@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   ChevronDown,
   ChevronUp,
   ClipboardPen,
@@ -412,6 +413,7 @@ export function Toolbar() {
           onClick={() => executeCommand('view.toggleCommentTools')}
           data-testid="comment-tools-button"
         />
+        <IconButton icon={BookOpen} tone="tools" label={t('toolbar.readMode')} onClick={() => executeCommand('view.readMode')} data-testid="read-mode-button" />
       </GlassGroup>
     );
     groups.info = (

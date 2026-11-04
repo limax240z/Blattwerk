@@ -1,4 +1,4 @@
-import type { CommandId } from '../../shared/commands';
+import { READ_MODE_COMMANDS, type CommandId } from '../../shared/commands';
 import type { FileInfo, OpenResult, TabDestination, TabReceived, TabTransfer, ViewMode } from '../../shared/ipc';
 import { api } from '../api';
 import { computeChanges, hasChanges } from '../features/annotations/changes';
@@ -7,6 +7,7 @@ import { deleteSelectedObject, toggleContentEditing } from '../features/content-
 import { deleteSelectedField, toggleFormEditing } from '../features/form-edit/actions';
 import { openRedactApply, openRedactFind, toggleRedactTools } from '../features/redaction/actions';
 import { toggleMarkTools } from '../features/annotations/mark-actions';
+import { enterReadMode, exitReadMode } from '../features/read-mode/read-mode';
 import { openStampDialog, removeArtifacts } from '../features/stamping/actions';
 import { currentBytes, deletePages, targetPages } from '../features/pages/actions';
 import { runPageCommand } from '../features/pages/commands';
@@ -1021,6 +1022,13 @@ function switchTab(offset: number): void {
 
 export function executeCommand(command: CommandId): void {
   const ui = useUi.getState();
+  if (ui.readMode && !READ_MODE_COMMANDS.includes(command)) return;
+  if (command === 'view.readMode') {
+    const active = getActiveTab();
+    if (ui.readMode) exitReadMode();
+    else if (active) enterReadMode(active);
+    return;
+  }
   if (command === 'file.open') {
     void openWithDialog();
     return;

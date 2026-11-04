@@ -384,3 +384,58 @@ test.describe('Formular bearbeiten', () => {
     await handle.close();
   });
 });
+
+test('Lesemodus: nur das Dokument, nichts lässt sich ändern, Esc stellt alles wieder her', async () => {
+  const { page, app, close } = await launchApp([fixture('formular.pdf')]);
+  await waitForDocument(page, 1);
+  await menuClick(app, 'view.actualSize');
+  await expect(page.getByTestId('zoom-select')).toHaveValue('page-actual');
+  const firstField = page.locator('.annotationLayer input[type="text"]').first();
+  await expect(firstField).toBeAttached();
+
+  await page.getByTestId('read-mode-button').click();
+  await expect(page.getByTestId('read-mode-exit')).toBeVisible();
+  await expect(page.getByTestId('open-button')).toBeHidden();
+  await expect(page.getByTestId('left-sidebar')).toHaveCount(0);
+
+  // Formularfeld: weder Klick noch Tippen noch direkter Fokus
+  const box = await firstField.boundingBox();
+  if (!box) throw new Error('Feld nicht sichtbar');
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.type('Max');
+  await firstField.focus().catch(() => undefined);
+  await page.keyboard.type('Max');
+  expect(await firstField.inputValue()).toBe('');
+
+  // Befehle, die ändern würden, bleiben wirkungslos; Menüpunkte sind erreichbar, tun aber nichts
+  await menuClick(app, 'view.toggleCommentTools');
+  await expect(page.getByTestId('comment-toolbar')).toHaveCount(0);
+  await menuClick(app, 'content.edit');
+  await expect(page.getByTestId('tab-dirty')).toHaveCount(0);
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('read-mode-exit')).toHaveCount(0);
+  await expect(page.getByTestId('open-button')).toBeVisible();
+  await expect(page.getByTestId('left-sidebar')).toBeVisible();
+  await expect(page.getByTestId('zoom-select')).toHaveValue('page-actual');
+  await firstField.click();
+  await page.keyboard.type('Max');
+  expect(await firstField.inputValue()).toBe('Max');
+  await close();
+});
+
+test('Lesemodus lässt sich aus jedem Arbeitsbereich starten', async () => {
+  const { page, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, 12);
+  for (const mode of ['organize-button', 'content-edit-button', 'form-edit-button', 'comment-tools-button', 'highlight-button', 'redact-tools-button']) {
+    await page.getByTestId(mode).click();
+    await page.getByTestId('read-mode-button').click();
+    await expect(page.getByTestId('read-mode-exit')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('read-mode-exit')).toHaveCount(0);
+    await expect(page.getByTestId('organize-button')).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('form-edit-toolbar')).toHaveCount(0);
+  }
+  await close();
+});
+

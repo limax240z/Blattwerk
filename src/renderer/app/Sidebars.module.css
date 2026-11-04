@@ -102,3 +102,36 @@
   width: auto;
   margin: 0 8px 8px;
 }
+
+/* Lasche zum Ein- und Ausblenden der Seitenleiste, mittig am linken Rand des Dokuments */
+.edgeToggle {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 52px;
+  padding: 0;
+  border: none;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  color: var(--color-text-muted);
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-outline);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.edgeToggle:hover {
+  color: var(--color-text);
+  background: var(--fill-selected);
+}
+
+/* Kompaktansicht: Die Leiste liegt über dem Dokument, der Knopf in der Werkzeugleiste genügt */
+:global([data-compact]) .edgeToggle {
+  display: none;
+}

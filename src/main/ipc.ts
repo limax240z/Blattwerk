@@ -714,6 +714,15 @@ export function registerIpc(ctx: IpcContext): void {
     done(valid);
   });
 
+  // Lesemodus: liefert, ob das Fenster schon im Vollbild war. Verborgene Fenster (Tests) bleiben, wie sie sind.
+  handle(IPC.windowFullscreen, (event, on: unknown) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || typeof on !== 'boolean') return false;
+    const before = win.isFullScreen();
+    if (win.isVisible()) win.setFullScreen(on);
+    return before;
+  });
+
   ipcMain.on(IPC.closeWindow, (event) => {
     if (!ctx.isTrustedSender(event)) return;
     const win = windowOf(event);

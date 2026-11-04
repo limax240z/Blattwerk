@@ -13,6 +13,59 @@ export function isResizable(a: Annotation): boolean {
   return ['square', 'circle', 'freetext', 'stamp', 'signature'].includes(a.kind);
 }
 
+// Rechteck der Seite im Benutzerraum aus den Ecken der Ansicht (auch bei gedrehten Seiten)
+export function pageRect({ width, height, toPdf }: { width: number; height: number; toPdf: (x: number, y: number) => Point }): Rect {
+  const a = toPdf(0, 0);
+  const b = toPdf(width, height);
+  return normalizeRect([a.x, a.y, b.x, b.y]);
+}
+
+export function clampToRect({ x, y }: Point, [l, b, r, t]: Rect): Point {
+  return { x: Math.min(Math.max(x, l), r), y: Math.min(Math.max(y, b), t) };
+}
+
+// Beschneidet einen Strich auf ein Rechteck (Seite): Was außerhalb liegt, fällt weg, am Rand endet der Strich genau auf
+// der Kante. Geht er hinaus und wieder hinein, entstehen mehrere Stücke.
+export function clipPath(path: Point[], [l, b, r, t]: Rect): Point[][] {
+  const runs: Point[][] = [];
+  let run: Point[] | null = null;
+  for (let i = 1; i < path.length; i++) {
+    const p = path[i - 1] as Point;
+    const q = path[i] as Point;
+    const dx = q.x - p.x;
+    const dy = q.y - p.y;
+    // Liang-Barsky: Abschnitt [t0, t1] der Strecke im Rechteck
+    let t0 = 0;
+    let t1 = 1;
+    let inside = true;
+    for (const [direction, distance] of [
+      [-dx, p.x - l],
+      [dx, r - p.x],
+      [-dy, p.y - b],
+      [dy, t - p.y],
+    ] as const) {
+      if (direction === 0) {
+        if (distance < 0) inside = false;
+        continue;
+      }
+      const ratio = distance / direction;
+      if (direction < 0) t0 = Math.max(t0, ratio);
+      else t1 = Math.min(t1, ratio);
+    }
+    if (!inside || t0 > t1) {
+      run = null;
+      continue;
+    }
+    if (!run) {
+      run = [t0 === 0 ? p : { x: p.x + dx * t0, y: p.y + dy * t0 }];
+      runs.push(run);
+    }
+    run.push(t1 === 1 ? q : { x: p.x + dx * t1, y: p.y + dy * t1 });
+    if (t1 < 1) run = null;
+  }
+  return runs;
+}
+
 const movePoint = (p: Point, dx: number, dy: number): Point => ({ x: p.x + dx, y: p.y + dy });
 const moveRect = ([l, b, r, t]: Rect, dx: number, dy: number): Rect => [l + dx, b + dy, r + dx, t + dy];
 

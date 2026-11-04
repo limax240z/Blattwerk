@@ -74,6 +74,7 @@ export const IPC = {
   closeCancelled: 'app:close-cancelled',
   // Fenster ohne Tabs schließen (nachdem sein letzter Tab in ein anderes Fenster gewandert ist)
   closeWindow: 'window:close',
+  windowFullscreen: 'window:fullscreen',
   // Tab wird über die Fenstergrenze gezogen (Vorschau am Zeiger) bzw. das Zielfenster meldet seine Einfügestelle
   tabDrag: 'window:tab-drag',
   tabDragHoverState: 'window:tab-drag-hover-state',
@@ -250,6 +251,7 @@ export interface MenuState {
   canPrint: boolean;
   viewMode: ViewMode | null;
   sidebarVisible: boolean;
+  readMode: boolean;
   rightPanelVisible: boolean;
   tabCount: number;
   // Tabs mit ungespeicherten Änderungen (für Schließen-Rückfrage und den Punkt im Schließen-Knopf)

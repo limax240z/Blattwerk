@@ -269,6 +269,39 @@ test.describe('Kommentieren', () => {
     await handle.close();
   });
 
+  test('Stift und Textmarker enden am Seitenrand, auch wenn man darüber hinaus zieht', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page } = handle;
+    const at = await pageSpace(page);
+    const overlay = page.getByTestId('annotation-overlay-0');
+    const page0 = await overlay.boundingBox();
+    if (!page0) throw new Error('Seite ohne Größe');
+    await page.getByTestId('tool-ink').click();
+    const start = at(300, 500);
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    // Weit nach rechts über die Seite hinaus
+    await page.mouse.move(page0.x + page0.width + 150, start.y, { steps: 10 });
+    await expect(overlay.locator('polyline').first()).toBeAttached();
+    await page.mouse.up();
+    await expect(cards(page)).toHaveCount(1);
+    const stroke = await overlay.locator('polyline').first().boundingBox();
+    if (!stroke) throw new Error('Strich ohne Größe');
+    expect(stroke.x + stroke.width).toBeLessThanOrEqual(page0.x + page0.width + 1);
+    await handle.close();
+  });
+
+  test('Lasche am Rand blendet die Seitenleiste ein und aus', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page } = handle;
+    await expect(page.getByTestId('left-sidebar')).toBeVisible();
+    await page.getByTestId('sidebar-toggle').click();
+    await expect(page.getByTestId('left-sidebar')).toHaveCount(0);
+    await page.getByTestId('sidebar-toggle').click();
+    await expect(page.getByTestId('left-sidebar')).toBeVisible();
+    await handle.close();
+  });
+
   test('Radierer: Strich, Pixel und Textmarker, jeweils ein Schritt zum Widerrufen', async () => {
     const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
     const { page } = handle;

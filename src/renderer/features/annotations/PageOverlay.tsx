@@ -33,7 +33,7 @@ import {
   SHAPE_SIZE,
   simplifyPath,
 } from './create';
-import { dragRect, inkRect, isMovable, isResizable, lineRect, quadsFromRects, rectOfQuads, resizeFrom, translate } from './geometry';
+import { clampToRect, clipPath, dragRect, inkRect, isMovable, isResizable, lineRect, pageRect, quadsFromRects, rectOfQuads, resizeFrom, translate } from './geometry';
 import { recognizeShape, SNAP_HOLD_MS, SNAP_JITTER_PX, transformShape } from './shape-snap';
 import { caretAt, rangeBetween, type Caret } from './text-caret';
 import { rangeTextRects } from './text-selection';
@@ -425,7 +425,7 @@ export function PageOverlay({
       }
       case 'line':
       case 'rect':
-        scheduleGesture({ ...current, to: at });
+        scheduleGesture({ ...current, to: clampToRect(at, pageRect(geometry)) });
         return;
       case 'move':
         scheduleGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
@@ -447,9 +447,10 @@ export function PageOverlay({
     const { colors, width, fontSize, dash } = store();
     switch (current.kind) {
       case 'ink': {
-        // Klick ohne Ziehen setzt einen Punkt
+        // Klick ohne Ziehen setzt einen Punkt; Striche enden am Seitenrand
         const stroke = current.snapped ?? simplifyPath(current.points);
-        const path = stroke.length < 2 ? dotPath(stroke[0] ?? current.points[0] ?? { x: 0, y: 0 }) : stroke;
+        const paths = stroke.length < 2 ? [dotPath(stroke[0] ?? current.points[0] ?? { x: 0, y: 0 })] : clipPath(stroke, pageRect(geometry));
+        if (paths.length === 0) return;
         const last = lastInk.get(tabId);
         const previous = last ? items.find((a) => a.id === last.id) : undefined;
         const now = time;
@@ -460,11 +461,11 @@ export function PageOverlay({
           previous.width === width &&
           (previous.dash ?? 'solid') === dash
         ) {
-          updateAnnotation(tabId, previous, appendInkStroke(previous, path));
+          updateAnnotation(tabId, previous, paths.reduce(appendInkStroke, previous));
           lastInk.set(tabId, { id: previous.id, pageIndex, time: now });
           return;
         }
-        const ink: InkAnnotation = createInk(baseFields(pageIndex), [path], colors.ink, width, dash);
+        const ink: InkAnnotation = createInk(baseFields(pageIndex), paths, colors.ink, width, dash);
         addAnnotation(tabId, ink);
         lastInk.set(tabId, { id: ink.id, pageIndex, time: now });
         return;
@@ -612,15 +613,11 @@ function draftShape(gesture: Gesture, geometry: PageGeometry, settings: ReturnTy
     }
     case 'ink':
       return (
-        <polyline
-          points={(gesture.snapped ?? gesture.points).map((p) => geometry.toView(p).join(',')).join(' ')}
-          fill="none"
-          stroke={css(colors.ink)}
-          strokeWidth={width}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeDasharray={dashPattern(settings.dash, width).join(' ') || undefined}
-        />
+        <g fill="none" stroke={css(colors.ink)} strokeWidth={width} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dashPattern(settings.dash, width).join(' ') || undefined}>
+          {clipPath(gesture.snapped ?? gesture.points, pageRect(geometry)).map((path, i) => (
+            <polyline key={i} points={path.map((p) => geometry.toView(p).join(',')).join(' ')} />
+          ))}
+        </g>
       );
     case 'line': {
       const [x1, y1] = geometry.toView(gesture.from);

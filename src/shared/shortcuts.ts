@@ -35,6 +35,7 @@ export const SHORTCUTS: Partial<Record<CommandId, Shortcut>> = {
   'view.rotateClockwise': { accelerator: 'Shift+CmdOrCtrl+Plus' },
   'view.rotateCounterClockwise': { accelerator: 'Shift+CmdOrCtrl+-' },
   'view.toggleSidebar': { accelerator: 'F4' },
+  'view.readMode': { accelerator: 'Shift+CmdOrCtrl+L' },
   'nav.firstPage': { accelerator: 'Home', rendererHandled: true },
   'nav.previousPage': { accelerator: 'Left', rendererHandled: true },
   'nav.nextPage': { accelerator: 'Right', rendererHandled: true },

@@ -63,6 +63,7 @@
       "rotate": "Ansicht drehen",
       "rotateClockwise": "Im Uhrzeigersinn",
       "rotateCounterClockwise": "Gegen den Uhrzeigersinn",
+      "readMode": "Lesemodus",
       "toggleSidebar": "Seitenleiste",
       "toggleRightPanel": "Suchbereich",
       "fullscreen": "Vollbild",
@@ -296,6 +297,7 @@
     "print": "Drucken",
     "properties": "Dokumenteigenschaften",
     "sidebar": "Seitenleiste ein- oder ausblenden",
+    "readMode": "Lesemodus: nur das Dokument, keine Änderungen",
     "search": "Suchen",
     "previousPage": "Vorherige Seite",
     "nextPage": "Nächste Seite",
@@ -1380,6 +1382,9 @@
       "download": "Das Laden ist abgebrochen. Bitte später noch einmal versuchen.",
       "invalid": "Die geladene Datei ist keine gültige Version von {{appName}}."
     }
+  },
+  "readMode": {
+    "exit": "Lesemodus beenden (Esc)"
   },
   "mark": {
     "title": "Markieren",
