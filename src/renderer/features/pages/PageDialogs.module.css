@@ -52,6 +52,15 @@
   white-space: nowrap;
 }
 
+.fileRange {
+  flex: none;
+  width: 96px;
+}
+
+.fileRange[aria-invalid='true'] {
+  outline: 1.5px solid var(--color-danger);
+}
+
 .fileMeta {
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);

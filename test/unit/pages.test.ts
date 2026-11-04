@@ -2,7 +2,7 @@
 import { deflateSync, crc32 } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import { imagePageLayout, isPdf, readImageInfo } from '../../src/shared/image-info';
-import { A4, chunkPages, formatPageRanges, marginsToUser, moveTarget, orderAfterMove, parsePageRanges, splitAtPages } from '../../src/shared/pages';
+import { A4, chunkPages, formatPageRanges, marginsToUser, moveTarget, orderAfterMove, pageSelection, parsePageRanges, splitAtPages } from '../../src/shared/pages';
 
 describe('Seitenangaben', () => {
   it('liest Einzelseiten, Bereiche und offene Bereiche (1-basiert → 0-basiert)', () => {
@@ -178,5 +178,17 @@ describe('Zuschneiden', () => {
     expect(marginsToUser(margins, 90)).toEqual({ left: 1, top: 2, right: 3, bottom: 4 });
     expect(marginsToUser(margins, 180)).toEqual({ left: 2, top: 3, right: 4, bottom: 1 });
     expect(marginsToUser(margins, 270)).toEqual({ left: 3, top: 4, right: 1, bottom: 2 });
+  });
+});
+
+describe('Seitenauswahl beim Zusammenführen', () => {
+  it('leer heißt alle Seiten', () => {
+    expect(pageSelection('', 10)).toBeNull();
+    expect(pageSelection('   ', 10)).toBeNull();
+  });
+  it('liest Bereiche und meldet Ungültiges', () => {
+    expect(pageSelection('1-3, 8', 10)).toEqual([0, 1, 2, 7]);
+    expect(pageSelection('11', 10)).toBe(false);
+    expect(pageSelection('abc', 10)).toBe(false);
   });
 });

@@ -84,6 +84,12 @@ export function parsePageRanges(text: string, pageCount: number): number[] | nul
   return [...pages].sort((a, b) => a - b);
 }
 
+// Seitenauswahl beim Zusammenführen: leer heißt alle Seiten (null wie bei PdfSource.pages), ungültig liefert false.
+export function pageSelection(text: string, pageCount: number): number[] | null | false {
+  if (text.trim() === '') return null;
+  return parsePageRanges(text, pageCount) ?? false;
+}
+
 // Kurzform für die Anzeige: [0,1,2,4] → „1-3, 5“
 export function formatPageRanges(pages: number[]): string {
   const sorted = [...new Set(pages)].sort((a, b) => a - b);
