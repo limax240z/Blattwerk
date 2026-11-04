@@ -28,6 +28,13 @@ oder ein Scan ist. Bisher ging das erst nach „Text erkennen“ (ADR 0015) von 
   erkannt), wird die Zugbahn ein Freihandstrich in der Farbe der Hervorhebung (12 pt, Deckkraft 0,4; `AnnotationLayer`).
   Mit Vorschau beim Ziehen, solange dabei kein Text ausgewählt wird.
 
+## Nachtrag 2026-11-04: Auswählen über mehrere Zeilen
+
+Fehlerbericht: Beim Ziehen über mehrere Zeilen sprang die Auswahl nach oben. Gemessen: Im Scan fiel sie in jeder
+Zeilenlücke von 450 Zeichen auf 0, weil Live-Text keine Abdeckung wie `.endOfContent` von pdf.js hatte; auf normalen
+Seiten klappte sie um, sobald der Zeiger eine Fußzeile erreichte, die im PDF vorn steht. Behoben mit
+`annotations/selection-drag.ts` und `annotations/text-order.ts`.
+
 ## Grenzen
 
 - Quer oder kopfüber fotografierter Text wird nicht erkannt (keine Lageerkennung); schräge Fotos nur ungefähr.

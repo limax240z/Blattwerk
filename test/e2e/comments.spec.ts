@@ -735,3 +735,54 @@ test('Kommentarliste filtern, sortieren und als Zusammenfassung sichern', async 
   expect(text).toContain(COMMENTS_PDF.status);
   await handle.close();
 });
+
+// Zieht langsam von der ersten bis zur letzten Textzeile und liefert den größten Rückfall der Auswahl (Zeichen) und
+// die Länge am Ende. dx: Abstand des Anfangs vom Beginn der ersten Zeile.
+async function dragAcrossLines(page: Page, layer: string, dx: number) {
+  const boxes = await page.locator(`[data-page-number="1"] ${layer} span`).evaluateAll((spans) => spans.map((span) => span.getBoundingClientRect()).filter((box) => box.width > 5).map(({ x, y, width, height }) => ({ x, y, width, height })));
+  boxes.sort((a, b) => a.y - b.y);
+  const first = boxes[0];
+  const last = boxes.at(-1);
+  if (!first || !last) throw new Error('Kein Text');
+  const from = { x: first.x + dx, y: first.y + first.height / 2 };
+  const to = { x: last.x + last.width / 2, y: last.y + last.height / 2 };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  let previous = 0;
+  let setback = 0;
+  for (let i = 1; i <= 100; i++) {
+    await page.mouse.move(from.x + ((to.x - from.x) * i) / 100, from.y + ((to.y - from.y) * i) / 100);
+    const length = await page.evaluate(() => window.getSelection()?.toString().length ?? 0);
+    setback = Math.max(setback, previous - length);
+    previous = length;
+  }
+  await page.mouse.up();
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  return { setback, length: previous };
+}
+
+test('Text über mehrere Zeilen ziehen: Die Auswahl springt nicht, auch mit Fußzeile und im Scan', async () => {
+  const text = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(text.page, TEXT_PDF.pages);
+  await menuClick(text.app, 'view.fitPage');
+  await expect(text.page.getByTestId('zoom-select')).toHaveValue('page-fit');
+  // Die Fußzeile steht im PDF vorn; sie gehört ans Ende, sonst klappt die Auswahl unten nach oben um
+  const lastSpan = text.page.locator('[data-page-number="1"] .textLayer span').last();
+  await expect(lastSpan).toContainText('Seite 1');
+  const onText = await dragAcrossLines(text.page, '.textLayer', 2);
+  expect(onText.setback).toBeLessThan(20);
+  expect(onText.length).toBeGreaterThan(400);
+  await text.close();
+
+  const scan = await launchApp([fixture('scan.pdf')]);
+  await waitForDocument(scan.page, 1);
+  await menuClick(scan.app, 'view.fitPage');
+  await expect(scan.page.locator('.textLayer[data-live-text] span').first()).toBeAttached({ timeout: 60_000 });
+  const inScan = await dragAcrossLines(scan.page, '.textLayer[data-live-text]', 2);
+  expect(inScan.setback).toBeLessThan(20);
+  expect(inScan.length).toBeGreaterThan(300);
+  // Anfang in der Lücke links neben dem Text
+  const fromGap = await dragAcrossLines(scan.page, '.textLayer[data-live-text]', -15);
+  expect(fromGap.length).toBeGreaterThan(300);
+  await scan.close();
+});
