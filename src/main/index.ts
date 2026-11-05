@@ -242,6 +242,23 @@ function scheduleAutoUpdateCheck(): void {
   });
 }
 
+// Umbenannt oder verschoben (im Finder oder in der App): Tab und Fenstertitel, „Zuletzt geöffnet“ und die gemerkte
+// Fensterlage ziehen mit
+files.onRenamed = ({ ownerId, info, oldPath, newPath }) => {
+  const ctx = contextByOwner(ownerId);
+  if (ctx && !ctx.win.isDestroyed()) ctx.win.webContents.send(IPC.fileRenamed, { fileId: info.fileId, name: info.name, dir: info.dir });
+  void (async () => {
+    if (await recent.contains(oldPath)) {
+      await recent.rename(oldPath, newPath);
+      if (process.platform === 'darwin' || process.platform === 'win32') app.addRecentDocument(newPath);
+      refreshMenu();
+      broadcast(IPC.recentChanged);
+    }
+    const bounds = positions.get(oldPath);
+    if (bounds) await positions.remember(newPath, bounds);
+  })().catch(() => undefined);
+};
+
 async function rememberRecent(filePath: string): Promise<void> {
   try {
     await recent.add(filePath);

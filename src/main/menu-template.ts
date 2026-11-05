@@ -90,6 +90,7 @@ export function buildMenuTemplate(ctx: MenuContext): MenuItemConstructorOptions[
       { type: 'separator' },
       cmd('file.save', t('menu.file.save'), { enabled: doc && state.activeDirty }),
       cmd('file.saveAs', t('menu.file.saveAs'), { enabled: doc }),
+      cmd('file.rename', t('menu.file.rename'), { enabled: doc }),
       cmd('file.saveAsTemplate', t('menu.file.saveAsTemplate'), { enabled: doc }),
       { type: 'separator' },
       // Schließen wirkt auf jeden Tab, auch während des Ladens, bei Kennwortabfrage oder Fehler.

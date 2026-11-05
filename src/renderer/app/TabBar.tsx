@@ -386,6 +386,11 @@ export function TabBar() {
             onAuxClick={(event) => {
               if (event.button === 1) void closeTab(tab.id);
             }}
+            // Doppelklick auf den Tab: Datei umbenennen
+            onDoubleClick={() => {
+              setActive(tab.id);
+              if (tab.status === 'ready') executeCommand('file.rename');
+            }}
             onKeyDown={(event) => {
               if (event.key === 'Enter' || event.key === ' ') setActive(tab.id);
             }}

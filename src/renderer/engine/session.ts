@@ -1182,6 +1182,11 @@ export function executeCommand(command: CommandId): void {
     case 'file.saveAs':
       void saveTab(tab.id, 'saveAs');
       return;
+    case 'file.rename':
+      // Ein neues leeres Dokument hat noch keinen Ort: erst sichern
+      if (tab.untitled) useUi.getState().notify(t('rename.errors.untitled'));
+      else useUi.getState().setRenameTab(tab.id);
+      return;
     case 'edit.undo':
     case 'edit.redo':
       // In Eingabefeldern wirkt Rückgängig auf den Text, sonst auf die Kommentare.

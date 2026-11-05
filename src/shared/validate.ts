@@ -98,6 +98,12 @@ export function isPdfBytes(value: unknown): value is Uint8Array {
 
 // Macht aus einem vorgeschlagenen Namen einen sicheren Dateinamen ohne Pfadanteile, mit Endung (Standard .pdf).
 // Entfernt Trennzeichen und in Windows verbotene Zeichen, vermeidet reservierte Gerätenamen (CON, NUL, COM1 …).
+// Neuer Name beim Umbenennen: unzulässige Zeichen werden ersetzt, .pdf wird ergänzt; ohne Inhalt null
+export function renameTarget(value: unknown): string | null {
+  if (typeof value !== 'string' || value.replace(/\.pdf$/i, '').trim().replace(/^[.\s]+|[.\s]+$/g, '') === '') return null;
+  return sanitizeFileName(value);
+}
+
 export function sanitizeFileName(value: unknown, fallback = 'Dokument', extension = '.pdf'): string {
   const raw = typeof value === 'string' ? value : '';
   let base = raw

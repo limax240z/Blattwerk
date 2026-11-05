@@ -675,6 +675,9 @@ export function createIosApi(): BlattwerkApi {
     signalReady: () => {
       void call('ready');
     },
+    // Umbenennen gibt es auf dem iPad nicht (Dateien verwaltet die App „Dateien“)
+    renameFile: async () => ({ ok: false, error: 'failed' }),
+    onFileRenamed: () => () => undefined,
     onFileOpened: (listener) => {
       openedListeners.add(listener);
       return () => openedListeners.delete(listener);

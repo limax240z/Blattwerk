@@ -97,6 +97,14 @@ export class RecentFiles {
     return this.#save(files);
   }
 
+  // Datei umbenannt oder verschoben: Eintrag behält Platz, Anheften und Zeitpunkt
+  async rename(oldPath: string, newPath: string): Promise<RecentFile[]> {
+    const files = (await this.list()).map((f) =>
+      samePath(f.path, oldPath, this.#platform) ? { ...f, path: newPath, name: path.basename(newPath), dir: path.dirname(newPath) } : f,
+    );
+    return this.#save(files);
+  }
+
   // Angeheftete bleiben stehen (wie in Word „Nicht angeheftete Elemente löschen“)
   async clear(): Promise<RecentFile[]> {
     return this.#save((await this.list()).filter((f) => f.pinned));

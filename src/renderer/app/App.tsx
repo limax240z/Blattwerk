@@ -58,6 +58,7 @@ import styles from './App.module.css';
 import { DropOverlay } from './DropOverlay';
 import { LeftSidebar } from './LeftSidebar';
 import { SidebarToggle } from './SidebarToggle';
+import { RenameDialog } from '../features/rename/RenameDialog';
 import { ReadModeBar } from '../features/read-mode/ReadModeBar';
 import { exitReadMode } from '../features/read-mode/read-mode';
 import { Notices } from './Notices';
@@ -82,6 +83,7 @@ export function App() {
   const prompt = useUi((s) => s.prompt);
   const settingsOpen = useUi((s) => s.settingsOpen);
   const homeOpen = useUi((s) => s.homeOpen);
+  const renameTab = useUi((s) => (s.renameTab ? (tabs.find((tab) => tab.id === s.renameTab) ?? null) : null));
   const templateDialogTab = useUi((s) =>
     s.templateDialogTab ? (tabs.find((tab) => tab.id === s.templateDialogTab) ?? null) : null,
   );
@@ -115,6 +117,11 @@ export function App() {
 
   useEffect(() => {
     const offOpened = api.onFileOpened((result) => void handleOpenResult(result));
+    // Im Finder umbenannt oder verschoben: Tab und Fenstertitel ziehen mit
+    const offRenamed = api.onFileRenamed(({ fileId, name, dir }) => {
+      const documents = useDocuments.getState();
+      for (const tab of documents.tabs) if (tab.fileId === fileId) documents.updateTab(tab.id, { name, dir });
+    });
     const offCommand = api.onMenuCommand((command) => executeCommand(command));
     const refreshRecent = () =>
       void api.recent.list().then((list) => useUi.getState().setRecent(list));
@@ -132,6 +139,7 @@ export function App() {
       offRecent();
       offClose();
       offReceived();
+      offRenamed();
       offMerge();
     };
   }, []);
@@ -229,6 +237,7 @@ export function App() {
       {goToPageOpen && active?.status === 'ready' && <GoToPageDialog tab={active} />}
       {print && <PrintProgressDialog progress={print} />}
       {settingsOpen && <SettingsDialog />}
+      {renameTab && <RenameDialog key={renameTab.id} tab={renameTab} />}
       {templateDialogTab && (
         <SaveTemplateDialog key={templateDialogTab.id} tab={templateDialogTab} />
       )}
