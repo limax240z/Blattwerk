@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { trackPointerLight } from '../components/glass/liquid-glass';
+import { trackPointerLight, watchEnergy } from '../components/glass/liquid-glass';
 import { useNativeGlass } from './native-glass';
 import { UpdateBanner } from '../features/update/UpdateBanner';
 import { api } from '../api';
@@ -106,6 +106,7 @@ export function App() {
   const fieldDialog = useFormEdit((s) => s.dialog);
 
   // Lichtquelle der Glanzkanten folgt der Maus
+  useEffect(() => watchEnergy(), []);
   useEffect(() => trackPointerLight(), []);
   // Seiten, die aus diesem Fenster in ein anderes gezogen werden, auf Anfrage liefern
   useEffect(() => startPageProvider(), []);

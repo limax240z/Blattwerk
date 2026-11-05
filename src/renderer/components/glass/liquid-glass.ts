@@ -109,6 +109,87 @@ export function displacementMap(width: number, height: number, radius: number, b
 
 let nextId = 0;
 
+// Stromsparen: im Akkubetrieb oder bei „Transparenz reduzieren“ (macOS) ruht der Lichtschein, und die Glasflächen
+// verzichten auf die Lichtbrechung (SVG-Filter im Hintergrund, kostet die Grafikkarte bei jedem Neuzeichnen). Unschärfe
+// und Sättigung bleiben, das Glas sieht also weiter wie Glas aus.
+let saving = false;
+const savingListeners = new Set<() => void>();
+
+export function energySaving(): boolean {
+  return saving;
+}
+
+function setSaving(next: boolean): void {
+  if (next === saving) return;
+  saving = next;
+  document.documentElement.toggleAttribute('data-energy-saving', saving);
+  for (const listener of savingListeners) listener();
+}
+
+interface BatteryLike extends EventTarget {
+  charging: boolean;
+}
+
+// Beobachtet Netzteil und Bedienungshilfen; liefert eine Funktion zum Beenden
+export function watchEnergy(): () => void {
+  const reduced = window.matchMedia('(prefers-reduced-transparency: reduce)');
+  let battery: BatteryLike | null = null;
+  const update = () => setSaving(reduced.matches || (battery !== null && !battery.charging));
+  reduced.addEventListener('change', update);
+  const getBattery = (navigator as Navigator & { getBattery?: () => Promise<BatteryLike> }).getBattery;
+  void getBattery
+    ?.call(navigator)
+    .then((value) => {
+      battery = value;
+      value.addEventListener('chargingchange', update);
+      update();
+    })
+    .catch(() => undefined);
+  update();
+  return () => {
+    reduced.removeEventListener('change', update);
+    battery?.removeEventListener('chargingchange', update);
+  };
+}
+
+// Glasflächen und Lage des Zeigers für den Lichtschein (trackPointerLight)
+const glassElements = new Set<HTMLElement>();
+const pointer = { x: 0, y: -80 };
+// So weit reicht der Lichtschein (größter Kreis in global.css, .liquid::before)
+const LIGHT_REACH = 260;
+const lit = new Set<HTMLElement>();
+
+// Erst alle Lagen lesen, dann schreiben: Abwechselnd lesen und schreiben zwänge den Browser zu einer Neuberechnung je
+// Fläche
+function light(elements: Iterable<HTMLElement>): void {
+  if (saving) {
+    for (const element of lit) {
+      element.style.removeProperty('--pointer-x');
+      element.style.removeProperty('--pointer-y');
+    }
+    lit.clear();
+    return;
+  }
+  const reach = [...elements].map((element) => {
+    const box = element.getBoundingClientRect();
+    const near =
+      pointer.x >= box.left - LIGHT_REACH && pointer.x <= box.right + LIGHT_REACH && pointer.y >= box.top - LIGHT_REACH && pointer.y <= box.bottom + LIGHT_REACH;
+    return [element, near] as const;
+  });
+  const x = `${Math.round(pointer.x)}px`;
+  const y = `${Math.round(pointer.y)}px`;
+  for (const [element, near] of reach) {
+    if (near) {
+      element.style.setProperty('--pointer-x', x);
+      element.style.setProperty('--pointer-y', y);
+      lit.add(element);
+    } else if (lit.delete(element)) {
+      element.style.removeProperty('--pointer-x');
+      element.style.removeProperty('--pointer-y');
+    }
+  }
+}
+
 // Verbindet ein Element mit einem eigenen Glasfilter, der seiner Größe und Rundung folgt. Liefert eine Ref-Funktion
 // (wirkt auch, wenn das Element erst später erscheint).
 export function useLiquidGlass<T extends HTMLElement>(options: GlassOptions = {}): (element: T | null) => void {
@@ -150,10 +231,22 @@ export function useLiquidGlass<T extends HTMLElement>(options: GlassOptions = {}
     update();
     const observer = new ResizeObserver(update);
     observer.observe(element);
-    element.style.setProperty('-webkit-backdrop-filter', `url(#${id}) blur(${blur}px) saturate(${saturation})`);
-    element.style.setProperty('backdrop-filter', `url(#${id}) blur(${blur}px) saturate(${saturation})`);
+    const backdrop = () => {
+      const value = `${saving ? '' : `url(#${id}) `}blur(${blur}px) saturate(${saturation})`;
+      element.style.setProperty('-webkit-backdrop-filter', value);
+      element.style.setProperty('backdrop-filter', value);
+    };
+    backdrop();
+    savingListeners.add(backdrop);
     element.classList.add('liquid');
+    glassElements.add(element);
+    light([element]);
     return () => {
+      savingListeners.delete(backdrop);
+      glassElements.delete(element);
+      lit.delete(element);
+      element.style.removeProperty('--pointer-x');
+      element.style.removeProperty('--pointer-y');
       observer.disconnect();
       filter.remove();
       element.style.removeProperty('-webkit-backdrop-filter');
@@ -165,27 +258,31 @@ export function useLiquidGlass<T extends HTMLElement>(options: GlassOptions = {}
   return setElement;
 }
 
-// Lichtquelle für die Glanzkanten: folgt dem Mauszeiger (CSS-Variablen --pointer-x/-y am Wurzelelement)
+// Lichtquelle für die Glanzkanten: folgt dem Mauszeiger. Die Werte (--pointer-x/-y) stehen nur an Glasflächen in
+// Reichweite, nicht am Wurzelelement: Eine Variable dort ließe den Browser bei jeder Mausbewegung die Darstellung des
+// ganzen Fensters neu berechnen (auch Tausende Textstücke der PDF-Seiten). Gemessen: 300 Bewegungen über einer Seite
+// kosteten so rund 0,6 s Stilberechnung; das war der größte Energieverbrauch der App.
 export function trackPointerLight(): () => void {
   let frame = 0;
-  let x = window.innerWidth * 0.3;
-  let y = -80;
+  pointer.x = window.innerWidth * 0.3;
+  pointer.y = -80;
   const apply = () => {
     frame = 0;
-    document.documentElement.style.setProperty('--pointer-x', `${Math.round(x)}px`);
-    document.documentElement.style.setProperty('--pointer-y', `${Math.round(y)}px`);
+    light(glassElements);
   };
   const move = (event: PointerEvent) => {
-    // Nicht beim Ziehen: Eine Variable am Wurzelelement lässt den Browser die Darstellung des ganzen Fensters neu
-    // berechnen (auch Tausende Textstücke der PDF-Seiten). Bei jeder Bewegung bremste das verschobene Objekte aus.
+    // Nicht beim Ziehen (verschobene Objekte sollen dem Zeiger ohne Verzögerung folgen)
     if (event.buttons !== 0) return;
-    x = event.clientX;
-    y = event.clientY;
+    if (saving) return;
+    pointer.x = event.clientX;
+    pointer.y = event.clientY;
     if (!frame) frame = requestAnimationFrame(apply);
   };
   apply();
   window.addEventListener('pointermove', move, { passive: true });
+  savingListeners.add(apply);
   return () => {
+    savingListeners.delete(apply);
     window.removeEventListener('pointermove', move);
     if (frame) cancelAnimationFrame(frame);
   };

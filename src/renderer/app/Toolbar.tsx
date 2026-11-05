@@ -132,7 +132,11 @@ function ZoomSelect({ tab }: { tab: TabState }) {
         value={draft ?? shown}
         onFocus={(event) => {
           setDraft(String(percent));
-          requestAnimationFrame(() => event.target.select());
+          // Nur, wenn das Feld noch dran ist: select() holte sonst den Fokus nach einem schnellen Enter zurück
+          const field = event.target;
+          requestAnimationFrame(() => {
+            if (document.activeElement === field) field.select();
+          });
         }}
         onChange={(event) => setDraft(event.target.value)}
         onKeyDown={(event) => {
