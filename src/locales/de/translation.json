@@ -26,6 +26,7 @@
       "quit": "Beenden",
       "save": "Speichern",
       "saveAs": "Speichern unter …",
+      "rename": "Umbenennen …",
       "combine": "Dateien zusammenführen …",
       "fromImages": "PDF aus Bildern erstellen …",
       "export": "Exportieren",
@@ -1384,6 +1385,18 @@
       "no-release": "Für dieses System liegt noch keine Version zum Laden bereit.",
       "download": "Das Laden ist abgebrochen. Bitte später noch einmal versuchen.",
       "invalid": "Die geladene Datei ist keine gültige Version von {{appName}}."
+    }
+  },
+  "rename": {
+    "title": "Umbenennen",
+    "label": "Neuer Name",
+    "ok": "Umbenennen",
+    "errors": {
+      "invalid-name": "Bitte einen Namen eingeben.",
+      "exists": "In diesem Ordner gibt es schon eine Datei mit diesem Namen.",
+      "untitled": "Dieses Dokument wurde noch nicht gesichert. Wähle „Sichern“, um ihm einen Namen und einen Ort zu geben.",
+      "unknown-file": "Die Datei wurde nicht gefunden.",
+      "failed": "Die Datei konnte nicht umbenannt werden."
     }
   },
   "readMode": {

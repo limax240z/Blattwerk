@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readdir, readFile, rm, stat, writeFile, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, writeFile, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -184,5 +184,90 @@ describe('FileRegistry', () => {
     expect(registry.documentOwner(fixture('text.pdf'))).toBe(9);
     await registry.close(fileId, 9);
     expect(registry.openCount).toBe(0);
+  });
+});
+
+describe('Umbenennen und Verschieben geöffneter Dokumente', () => {
+  const pdfBytes = () => readFile(fixture('text.pdf'));
+
+  it('folgt einer Datei, die außerhalb der App umbenannt wurde, und meldet den neuen Namen', async () => {
+    const original = path.join(dir, 'alt.pdf');
+    await writeFile(original, await pdfBytes());
+    const registry = new FileRegistry();
+    const renamed: string[] = [];
+    registry.onRenamed = ({ newPath }) => renamed.push(newPath);
+    const opened = await registry.open(original, 1);
+    if (!opened.ok) throw new Error('nicht geöffnet');
+    const target = path.join(dir, 'neu.pdf');
+    const { rename } = await import('node:fs/promises');
+    await rename(original, target);
+    // Spätestens vor dem Speichern sucht das Register die Datei
+    expect(await registry.isUnchangedOnDisk(opened.file.fileId, 1)).toBe(true);
+    expect(registry.pathOf(opened.file.fileId, 1)).toBe(target);
+    expect(renamed).toEqual([target]);
+    await registry.closeAllOwnedBy(1);
+  });
+
+  it('bemerkt das Umbenennen von selbst (Ordner wird beobachtet)', async () => {
+    const original = path.join(dir, 'beobachtet.pdf');
+    await writeFile(original, await pdfBytes());
+    const registry = new FileRegistry();
+    const seen = new Promise<string>((resolve) => {
+      registry.onRenamed = ({ info }) => resolve(info.name);
+    });
+    const opened = await registry.open(original, 1);
+    if (!opened.ok) throw new Error('nicht geöffnet');
+    const { rename } = await import('node:fs/promises');
+    await rename(original, path.join(dir, 'im Finder umbenannt.pdf'));
+    expect(await Promise.race([seen, new Promise((resolve) => setTimeout(() => resolve('zu langsam'), 4000))])).toBe('im Finder umbenannt.pdf');
+    await registry.closeAllOwnedBy(1);
+  });
+
+  it('benennt in der App um, lehnt vergebene Namen ab', async () => {
+    const original = path.join(dir, 'brief.pdf');
+    await writeFile(original, await pdfBytes());
+    await writeFile(path.join(dir, 'vergeben.pdf'), 'x');
+    const registry = new FileRegistry();
+    const opened = await registry.open(original, 1);
+    if (!opened.ok) throw new Error('nicht geöffnet');
+    expect(await registry.rename(opened.file.fileId, 1, 'vergeben.pdf')).toMatchObject({ ok: false, error: 'exists' });
+    const result = await registry.rename(opened.file.fileId, 1, 'Bewerbung.pdf');
+    expect(result).toMatchObject({ ok: true, file: { name: 'Bewerbung.pdf', dir } });
+    expect((await readdir(dir)).sort()).toEqual(['Bewerbung.pdf', 'vergeben.pdf']);
+    // Nur andere Groß- und Kleinschreibung ist erlaubt (dieselbe Datei)
+    expect(await registry.rename(opened.file.fileId, 1, 'bewerbung.pdf')).toMatchObject({ ok: true });
+    // Lesen geht weiter über das offene Handle
+    expect((await registry.read(opened.file.fileId, 0, 4, 1)).length).toBe(4);
+    await registry.closeAllOwnedBy(1);
+  });
+
+  // Verschieben in einen anderen Ordner findet unter macOS lsof über das offene Handle
+  it.skipIf(process.platform !== 'darwin')('folgt dem Verschieben in einen anderen Ordner, aber nicht in den Papierkorb', async () => {
+    const { mkdir: makeDir, rename } = await import('node:fs/promises');
+    const original = path.join(dir, 'wandert.pdf');
+    await writeFile(original, await pdfBytes());
+    const registry = new FileRegistry();
+    const opened = await registry.open(original, 1);
+    if (!opened.ok) throw new Error('nicht geöffnet');
+    const elsewhere = path.join(dir, 'Unterordner');
+    await makeDir(elsewhere);
+    await rename(original, path.join(elsewhere, 'wandert.pdf'));
+    await registry.isUnchangedOnDisk(opened.file.fileId, 1);
+    expect(registry.pathOf(opened.file.fileId, 1)).toBe(path.join(await realpath(elsewhere), 'wandert.pdf'));
+    const trash = path.join(dir, '.Trash');
+    await makeDir(trash);
+    await rename(path.join(elsewhere, 'wandert.pdf'), path.join(trash, 'wandert.pdf'));
+    expect(await registry.isUnchangedOnDisk(opened.file.fileId, 1)).toBe(false);
+    expect(registry.pathOf(opened.file.fileId, 1)).toBe(path.join(await realpath(elsewhere), 'wandert.pdf'));
+    await registry.closeAllOwnedBy(1);
+  });
+
+  it('„Zuletzt geöffnet“ behält Platz und Anheften', async () => {
+    const recent = new RecentFiles(path.join(dir, 'recent.json'));
+    await recent.add('/a/eins.pdf', 1);
+    await recent.add('/a/zwei.pdf', 2);
+    await recent.setPinned('/a/eins.pdf', true);
+    const files = await recent.rename('/a/eins.pdf', '/b/drei.pdf');
+    expect(files[0]).toMatchObject({ path: '/b/drei.pdf', name: 'drei.pdf', dir: '/b', pinned: true });
   });
 });

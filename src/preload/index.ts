@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron';
 import { isCommandId } from '../shared/commands';
-import { IPC, type MenuCommandMessage, type OpenResult, type PagesProvideRequest, type TabDragHover, type TabReceived } from '../shared/ipc';
+import { IPC, type MenuCommandMessage, type OpenResult, type PagesProvideRequest, type RenamedInfo, type TabDragHover, type TabReceived } from '../shared/ipc';
 import type { OnlineCheck, UpdateProgress } from '../shared/update';
 import type { BlattwerkApi } from './api-types';
 
@@ -54,6 +54,7 @@ const api: BlattwerkApi = {
   print: (request) => ipcRenderer.invoke(IPC.print, request),
   saveFile: (fileId, bytes, force) => ipcRenderer.invoke(IPC.saveFile, fileId, bytes, force === true),
   saveFileAs: (fileId, bytes) => ipcRenderer.invoke(IPC.saveFileAs, fileId, bytes),
+  renameFile: (fileId, name) => ipcRenderer.invoke(IPC.renameFile, fileId, name),
   pickFiles: (kind) => ipcRenderer.invoke(IPC.pickFiles, kind),
   registerDroppedFile: (file: File) => ipcRenderer.invoke(IPC.registerDropped, pathOf(file)),
   newBlankDocument: () => ipcRenderer.invoke(IPC.newBlank),
@@ -120,6 +121,15 @@ const api: BlattwerkApi = {
   setMenuState: (state) => ipcRenderer.send(IPC.menuState, state),
   setGlassRegions: (regions) => ipcRenderer.send(IPC.glassRegions, regions),
   signalReady: () => ipcRenderer.send(IPC.rendererReady),
+  onFileRenamed: (listener) =>
+    subscribe(
+      IPC.fileRenamed,
+      (p) => {
+        const value = p as Partial<RenamedInfo> | null;
+        return typeof value?.fileId === 'string' && typeof value.name === 'string' && typeof value.dir === 'string' ? (value as RenamedInfo) : null;
+      },
+      listener,
+    ),
   onFileOpened: (listener) =>
     subscribe(IPC.fileOpened, (p) => (typeof p === 'object' && p !== null ? (p as OpenResult) : null), listener),
   onMenuCommand: (listener) =>

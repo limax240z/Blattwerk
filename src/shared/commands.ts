@@ -5,6 +5,7 @@ export const COMMANDS = [
   'file.close',
   'file.save',
   'file.saveAs',
+  'file.rename',
   'file.print',
   'file.properties',
   'app.settings',

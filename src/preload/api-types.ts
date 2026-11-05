@@ -24,6 +24,8 @@ import type {
   RecentFile,
   SaveNewResult,
   SaveResult,
+  RenameResult,
+  RenamedInfo,
   SaveToFolderResult,
   SavedSignature,
   SignatureInput,
@@ -74,6 +76,8 @@ export interface BlattwerkApi {
   // Speichert neue Bytes über die geöffnete Datei. force überschreibt auch bei Änderungen von außen.
   saveFile(fileId: string, bytes: Uint8Array, force?: boolean): Promise<SaveResult>;
   saveFileAs(fileId: string, bytes: Uint8Array): Promise<SaveResult>;
+  // Dokument im selben Ordner umbenennen
+  renameFile(fileId: string, name: string): Promise<RenameResult>;
   // Quelldateien (PDFs, Bilder) wählen bzw. per Drag & Drop anmelden; gelesen wird danach über readRange.
   pickFiles(kind: PickKind): Promise<PickResult>;
   registerDroppedFile(file: File): Promise<OpenResult>;
@@ -147,6 +151,8 @@ export interface BlattwerkApi {
   setGlassRegions(regions: GlassRegion[]): void;
   signalReady(): void;
   onFileOpened(listener: (result: OpenResult) => void): () => void;
+  // Ein geöffnetes Dokument wurde umbenannt oder verschoben (auch im Finder)
+  onFileRenamed(listener: (renamed: RenamedInfo) => void): () => void;
   onMenuCommand(listener: (command: CommandId) => void): () => void;
   onRecentChanged(listener: () => void): () => void;
 }

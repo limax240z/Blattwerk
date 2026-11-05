@@ -17,6 +17,8 @@ export const IPC = {
   openExternal: 'shell:open-external',
   saveFile: 'file:save',
   saveFileAs: 'file:save-as',
+  renameFile: 'file:rename',
+  fileRenamed: 'file:renamed',
   settingsGet: 'settings:get',
   settingsSetAuthor: 'settings:set-author',
   // Phase 3: Quelldateien wählen (PDFs, Bilder) und neue Dokumente speichern
@@ -278,6 +280,18 @@ export interface MenuState {
 export type SaveErrorCode = 'changed-externally' | 'cancelled' | 'write-failed' | 'unknown-file' | 'invalid-data';
 
 export type SaveResult = { ok: true; file: FileInfo } | { ok: false; error: SaveErrorCode; detail?: string };
+
+// Umbenennen in der App: leerer Name, Name schon vergeben, Dokument ohne festen Ort (noch nie gespeichert)
+export type RenameResult =
+  | { ok: true; file: FileInfo }
+  | { ok: false; error: 'invalid-name' | 'exists' | 'untitled' | 'unknown-file' | 'failed'; detail?: string };
+
+// Ein geöffnetes Dokument hat einen neuen Namen oder Ort (in der App oder im Finder umbenannt bzw. verschoben)
+export interface RenamedInfo {
+  fileId: string;
+  name: string;
+  dir: string;
+}
 
 export interface AppSettings {
   authorName: string;

@@ -1,7 +1,8 @@
+import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { promises as fs } from 'node:fs';
+import { promises as fs, watch, type FSWatcher } from 'node:fs';
 import path from 'node:path';
-import type { FileInfo, FileKind, OpenResult, PickKind } from '../../shared/ipc';
+import type { FileInfo, FileKind, OpenResult, PickKind, RenameResult } from '../../shared/ipc';
 import { looksLikePdf, validateReadRange } from '../../shared/validate';
 
 // Erkennt die Dateiart am Inhalt, nicht an der Endung.
@@ -28,6 +29,34 @@ interface OpenFile {
   document: boolean;
   // Stand beim Öffnen. Ändert sich die Datei danach, liefern Lesezugriffe einen Fehler statt falscher Daten.
   mtimeMs: number;
+  // Kennung im Dateisystem (Laufwerk und Dateinummer): bleibt beim Umbenennen und Verschieben gleich
+  dev: bigint;
+  ino: bigint;
+}
+
+// Umbenannt oder verschoben (im Finder oder in der App): neuer Pfad einer geöffneten Datei
+export interface RenamedFile {
+  ownerId: number;
+  info: FileInfo;
+  oldPath: string;
+  newPath: string;
+}
+
+// Ordner mit so vielen Einträgen werden beim Suchen der umbenannten Datei nicht ganz durchgesehen
+const MAX_SCAN = 5000;
+// Ereignisse des Dateisystems kommen oft gehäuft; erst danach suchen
+const FOLLOW_DELAY_MS = 150;
+// Im Papierkorb gilt eine Datei als weg: dorthin folgt das Register nicht
+const TRASH = /[\\/]\.Trash(es)?[\\/]|[\\/]\$Recycle\.Bin[\\/]/i;
+
+// Aktueller Pfad einer geöffneten Datei (nur macOS: lsof kennt ihn über das Handle, auch nach dem Verschieben)
+function pathOfHandle(fd: number): Promise<string | null> {
+  return new Promise((resolve) => {
+    execFile('/usr/sbin/lsof', ['-a', '-p', String(process.pid), '-d', String(fd), '-Fn'], { timeout: 3000 }, (error, stdout) => {
+      const line = error ? undefined : stdout.split('\n').find((entry) => entry.startsWith('n/'));
+      resolve(line ? line.slice(1) : null);
+    });
+  });
 }
 
 function normalizePath(filePath: string, platform: NodeJS.Platform = process.platform): string {
@@ -89,8 +118,17 @@ export class FileRegistry {
       await handle.close().catch(() => undefined);
       return { ok: false, error: 'unreadable', name };
     }
+    let id;
+    try {
+      id = await handle.stat({ bigint: true });
+    } catch {
+      await handle.close().catch(() => undefined);
+      return { ok: false, error: 'unreadable', name };
+    }
     const info: FileInfo = { fileId: randomUUID(), name, dir: path.dirname(filePath), size: opened.size, kind };
-    this.#files.set(info.fileId, { info, path: filePath, handle, ownerId, document: accept === 'pdf-only', mtimeMs: opened.mtimeMs });
+    const document = accept === 'pdf-only';
+    this.#files.set(info.fileId, { info, path: filePath, handle, ownerId, document, mtimeMs: opened.mtimeMs, dev: id.dev, ino: id.ino });
+    if (document) this.#watch(info.dir);
     return { ok: true, file: info };
   }
 
@@ -122,6 +160,7 @@ export class FileRegistry {
   async isUnchangedOnDisk(fileId: string, ownerId: number): Promise<boolean> {
     const file = this.#files.get(fileId);
     if (!file || file.ownerId !== ownerId) return false;
+    await this.#follow(file);
     try {
       const current = await fs.stat(file.path);
       return current.size === file.info.size && current.mtimeMs === file.mtimeMs;
@@ -203,6 +242,115 @@ export class FileRegistry {
     }
   }
 
+  // Meldet umbenannte und verschobene Dokumente (Fenster aktualisieren Tab, Titel und „Zuletzt geöffnet“)
+  onRenamed: ((file: RenamedFile) => void) | null = null;
+
+  #watchers = new Map<string, { watcher: FSWatcher; count: number }>();
+  #pending = new Map<string, ReturnType<typeof setTimeout>>();
+
+  // Ordner beobachten, in denen Dokumente liegen: Wird eine davon umbenannt, folgt das Register ihr sofort
+  #watch(dir: string): void {
+    const entry = this.#watchers.get(dir);
+    if (entry) {
+      entry.count++;
+      return;
+    }
+    try {
+      const watcher = watch(dir, { persistent: false }, (_event, filename) => this.#changedIn(dir, filename?.toString() ?? null));
+      watcher.on('error', () => this.#unwatch(dir, true));
+      this.#watchers.set(dir, { watcher, count: 1 });
+    } catch {
+      // Ordner nicht beobachtbar: Das Register folgt der Datei dann spätestens beim Speichern
+    }
+  }
+
+  #unwatch(dir: string, all = false): void {
+    const entry = this.#watchers.get(dir);
+    if (!entry) return;
+    entry.count--;
+    if (entry.count > 0 && !all) return;
+    entry.watcher.close();
+    this.#watchers.delete(dir);
+  }
+
+  #changedIn(dir: string, filename: string | null): void {
+    for (const file of this.#files.values()) {
+      if (!file.document || path.dirname(file.path) !== dir) continue;
+      if (filename !== null && filename !== path.basename(file.path)) continue;
+      const id = file.info.fileId;
+      clearTimeout(this.#pending.get(id));
+      this.#pending.set(
+        id,
+        setTimeout(() => {
+          this.#pending.delete(id);
+          void this.#follow(file);
+        }, FOLLOW_DELAY_MS),
+      );
+    }
+  }
+
+  // Liegt die Datei nicht mehr unter ihrem Pfad, sucht das Register sie anhand ihrer Kennung: erst im selben Ordner
+  // (Umbenennen im Finder), unter macOS dann über das offene Handle (Verschieben in einen anderen Ordner).
+  async #follow(file: OpenFile): Promise<void> {
+    try {
+      const current = await fs.stat(file.path, { bigint: true });
+      if (current.dev === file.dev && current.ino === file.ino) return;
+    } catch {
+      // Pfad gibt es nicht mehr: suchen
+    }
+    const found = await this.#find(file);
+    if (found && found !== file.path && this.#files.get(file.info.fileId) === file) this.#moved(file, found);
+  }
+
+  async #find(file: OpenFile): Promise<string | null> {
+    const same = async (candidate: string) => {
+      const stat = await fs.lstat(candidate, { bigint: true }).catch(() => null);
+      return stat?.isFile() === true && stat.dev === file.dev && stat.ino === file.ino;
+    };
+    const dir = path.dirname(file.path);
+    const names = await fs.readdir(dir).catch(() => [] as string[]);
+    for (const name of names.slice(0, MAX_SCAN)) {
+      const candidate = path.join(dir, name);
+      if (await same(candidate)) return candidate;
+    }
+    if (process.platform === 'darwin' && file.handle) {
+      const candidate = await pathOfHandle(file.handle.fd);
+      if (candidate && !TRASH.test(candidate) && (await same(candidate))) return candidate;
+    }
+    return null;
+  }
+
+  #moved(file: OpenFile, newPath: string): void {
+    const oldPath = file.path;
+    const oldDir = path.dirname(oldPath);
+    file.path = newPath;
+    file.info = { ...file.info, name: path.basename(newPath), dir: path.dirname(newPath) };
+    if (file.document && oldDir !== file.info.dir) {
+      this.#unwatch(oldDir);
+      this.#watch(file.info.dir);
+    }
+    this.onRenamed?.({ ownerId: file.ownerId, info: file.info, oldPath, newPath });
+  }
+
+  // Benennt ein Dokument im selben Ordner um. name ist schon geprüft (validFileName).
+  async rename(fileId: string, ownerId: number, name: string): Promise<RenameResult> {
+    const file = this.#files.get(fileId);
+    if (!file || file.ownerId !== ownerId || !file.document) return { ok: false, error: 'unknown-file' };
+    await this.#follow(file);
+    const target = path.join(path.dirname(file.path), name);
+    if (target === file.path) return { ok: true, file: file.info };
+    // Gibt es den Namen schon? (Nur andere Groß- und Kleinschreibung ist unter macOS und Windows dieselbe Datei.)
+    const existing = await fs.stat(target, { bigint: true }).catch(() => null);
+    if (existing && !(existing.dev === file.dev && existing.ino === file.ino)) return { ok: false, error: 'exists' };
+    try {
+      await fs.rename(file.path, target);
+    } catch (error) {
+      return { ok: false, error: 'failed', detail: String(error) };
+    }
+    this.#moved(file, target);
+    return { ok: true, file: file.info };
+  }
+
   pathOf(fileId: string, ownerId: number): string | null {
     const file = this.#files.get(fileId);
     return file && file.ownerId === ownerId ? file.path : null;
@@ -212,6 +360,9 @@ export class FileRegistry {
     const file = this.#files.get(fileId);
     if (!file || file.ownerId !== ownerId) return;
     this.#files.delete(fileId);
+    clearTimeout(this.#pending.get(fileId));
+    this.#pending.delete(fileId);
+    if (file.document) this.#unwatch(path.dirname(file.path));
     await file.handle?.close().catch(() => undefined);
   }
 

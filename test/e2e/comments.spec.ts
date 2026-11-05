@@ -1,6 +1,6 @@
 // Phase 2: Kommentieren. Alle Tests arbeiten auf Kopien der Test-PDFs in einem temporären Ordner.
 import { expect, test, type Page } from '@playwright/test';
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { COMMENTS_PDF, fixture, imageFixture, TEXT_PDF } from '../fixtures/expectations';
@@ -299,6 +299,44 @@ test.describe('Kommentieren', () => {
     await expect(page.getByTestId('left-sidebar')).toHaveCount(0);
     await page.getByTestId('sidebar-toggle').click();
     await expect(page.getByTestId('left-sidebar')).toBeVisible();
+    await handle.close();
+  });
+
+  test('Datei im Finder umbenennen: Tab folgt, Speichern schreibt in die umbenannte Datei; Umbenennen in der App', async () => {
+    const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
+    const { page, app, file } = handle;
+    const tab = page.getByTestId('tab').first();
+    await expect(tab).toContainText(path.basename(file));
+    // Wie im Finder: von außen umbenennen
+    const moved = path.join(path.dirname(file), 'im Finder umbenannt.pdf');
+    renameSync(file, moved);
+    await expect(tab).toContainText('im Finder umbenannt.pdf');
+    await expect.poll(() => page.title()).toContain('im Finder umbenannt.pdf');
+    // Eine Änderung speichern: landet in der umbenannten Datei, ohne Rückfrage
+    const before = statSync(moved).size;
+    const at = await pageSpace(page);
+    await page.getByTestId('tool-ink').click();
+    await drag(page, at(100, 600), at(300, 620));
+    await expect(cards(page)).toHaveCount(1);
+    await save(page, app);
+    await expect(page.getByTestId('prompt-changed')).toHaveCount(0);
+    expect(statSync(moved).size).toBeGreaterThan(before);
+    expect(existsSync(file)).toBe(false);
+
+    // Umbenennen in der App (Menü), vergebene Namen werden abgelehnt
+    writeFileSync(path.join(path.dirname(file), 'vergeben.pdf'), 'x');
+    await menuClick(app, 'file.rename');
+    const input = page.getByTestId('rename-input');
+    await expect(input).toHaveValue('im Finder umbenannt');
+    await input.fill('vergeben');
+    await page.getByTestId('rename-ok').click();
+    await expect(page.getByTestId('rename-error')).toBeVisible();
+    await input.fill('Bewerbung');
+    await page.getByTestId('rename-ok').click();
+    await expect(page.getByTestId('rename-dialog')).toHaveCount(0);
+    await expect(tab).toContainText('Bewerbung.pdf');
+    expect(existsSync(path.join(path.dirname(file), 'Bewerbung.pdf'))).toBe(true);
+    expect(existsSync(moved)).toBe(false);
     await handle.close();
   });
 

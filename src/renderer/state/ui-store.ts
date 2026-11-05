@@ -107,6 +107,9 @@ interface UiState {
   setHomeOpen: (open: boolean) => void;
   // „Als Vorlage sichern“: Dialog für diesen Tab
   templateDialogTab: string | null;
+  // Tab, dessen Datei gerade umbenannt wird (Dialog „Umbenennen“)
+  renameTab: string | null;
+  setRenameTab: (tabId: string | null) => void;
   setTemplateDialogTab: (tabId: string | null) => void;
   setDraggingFiles: (dragging: boolean) => void;
   requestSearchFocus: () => void;
@@ -154,6 +157,7 @@ export const useUi = create<UiState>((set) => ({
   recent: [],
   homeOpen: false,
   templateDialogTab: null,
+  renameTab: null,
   draggingFiles: false,
   searchFocusRequest: 0,
   searchFocusHandled: 0,
@@ -190,6 +194,7 @@ export const useUi = create<UiState>((set) => ({
   setRecent: (recent) => set({ recent }),
   setHomeOpen: (homeOpen) => set({ homeOpen }),
   setTemplateDialogTab: (templateDialogTab) => set({ templateDialogTab }),
+  setRenameTab: (renameTab) => set({ renameTab }),
   setDraggingFiles: (draggingFiles) => set({ draggingFiles }),
   requestSearchFocus: () =>
     set((state) => ({ rightPanelVisible: true, searchFocusRequest: state.searchFocusRequest + 1 })),

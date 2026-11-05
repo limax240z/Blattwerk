@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_READ_CHUNK } from '../../src/shared/ipc';
 import {
+  renameTarget,
   isAllowedExternalUrl,
   isFileId,
   isSafeLocalPath,
@@ -157,19 +158,38 @@ describe('Tab-Übergabe zwischen Fenstern', () => {
   const pdf = new TextEncoder().encode('%PDF-1.7\n%%EOF');
 
   it('nimmt gültige Übergaben an', () => {
-    expect(validateTabTransfer({ bytes: null, password: null, filePassword: null, page: 1 })).toEqual({ bytes: null, password: null, filePassword: null, page: 1 });
-    expect(validateTabTransfer({ bytes: pdf, password: 'geheim', filePassword: null, page: 3 })?.bytes).toBe(pdf);
+    expect(
+      validateTabTransfer({ bytes: null, password: null, filePassword: null, page: 1 }),
+    ).toEqual({ bytes: null, password: null, filePassword: null, page: 1 });
+    expect(
+      validateTabTransfer({ bytes: pdf, password: 'geheim', filePassword: null, page: 3 })?.bytes,
+    ).toBe(pdf);
   });
 
   it('lehnt Nicht-PDFs, ungültige Seiten und lange Kennwörter ab', () => {
-    expect(validateTabTransfer({ bytes: new Uint8Array([1, 2, 3]), password: null, filePassword: null, page: 1 })).toBeNull();
-    expect(validateTabTransfer({ bytes: null, password: null, filePassword: null, page: 0 })).toBeNull();
-    expect(validateTabTransfer({ bytes: null, password: 'x'.repeat(2000), filePassword: null, page: 1 })).toBeNull();
+    expect(
+      validateTabTransfer({
+        bytes: new Uint8Array([1, 2, 3]),
+        password: null,
+        filePassword: null,
+        page: 1,
+      }),
+    ).toBeNull();
+    expect(
+      validateTabTransfer({ bytes: null, password: null, filePassword: null, page: 0 }),
+    ).toBeNull();
+    expect(
+      validateTabTransfer({ bytes: null, password: 'x'.repeat(2000), filePassword: null, page: 1 }),
+    ).toBeNull();
     expect(validateTabTransfer(null)).toBeNull();
   });
 
   it('prüft das Ziel', () => {
-    expect(validateTabDestination({ kind: 'point', x: 10, y: -20 })).toEqual({ kind: 'point', x: 10, y: -20 });
+    expect(validateTabDestination({ kind: 'point', x: 10, y: -20 })).toEqual({
+      kind: 'point',
+      x: 10,
+      y: -20,
+    });
     expect(validateTabDestination({ kind: 'merge' })).toEqual({ kind: 'merge' });
     expect(validateTabDestination({ kind: 'new', extra: 1 })).toEqual({ kind: 'new' });
     expect(validateTabDestination({ kind: 'point', x: Number.NaN, y: 0 })).toBeNull();
@@ -177,13 +197,37 @@ describe('Tab-Übergabe zwischen Fenstern', () => {
   });
 
   it('prüft Meldungen beim Ziehen über die Fenstergrenze', () => {
-    const start = { kind: 'start', title: 'a.pdf', tabOffset: { x: 4, y: 5 }, grip: { x: 30, y: 60 } };
+    const start = {
+      kind: 'start',
+      title: 'a.pdf',
+      tabOffset: { x: 4, y: 5 },
+      grip: { x: 30, y: 60 },
+    };
     expect(validateTabDragMessage(start)).toEqual(start);
-    expect(validateTabDragMessage({ kind: 'move', x: 1, y: 2, detached: true })).toEqual({ kind: 'move', x: 1, y: 2, detached: true });
+    expect(validateTabDragMessage({ kind: 'move', x: 1, y: 2, detached: true })).toEqual({
+      kind: 'move',
+      x: 1,
+      y: 2,
+      detached: true,
+    });
     expect(validateTabDragMessage({ kind: 'end', more: 1 })).toEqual({ kind: 'end' });
     expect(validateTabDragMessage({ ...start, title: 'x'.repeat(2000) })).toBeNull();
     expect(validateTabDragMessage({ kind: 'move', x: 1, y: 2 })).toBeNull();
-    expect(validateTabDragHoverState({ overBar: true, index: 2 })).toEqual({ overBar: true, index: 2 });
+    expect(validateTabDragHoverState({ overBar: true, index: 2 })).toEqual({
+      overBar: true,
+      index: 2,
+    });
     expect(validateTabDragHoverState({ overBar: true, index: -1 })).toBeNull();
+  });
+});
+
+describe('renameTarget', () => {
+  it('ergänzt .pdf, ersetzt unzulässige Zeichen, lehnt Leeres ab', () => {
+    expect(renameTarget('Bewerbung')).toBe('Bewerbung.pdf');
+    expect(renameTarget('Bewerbung.PDF')).toBe('Bewerbung.pdf');
+    expect(renameTarget('a/b:c')).toBe('a-b-c.pdf');
+    expect(renameTarget('   ')).toBeNull();
+    expect(renameTarget('.pdf')).toBeNull();
+    expect(renameTarget(5)).toBeNull();
   });
 });

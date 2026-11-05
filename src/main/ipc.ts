@@ -19,6 +19,7 @@ import {
   type PrintRequest,
   type RecentFile,
   type SaveNewResult,
+  type RenameResult,
   type SaveResult,
   type SaveToFolderResult,
   type TabDestination,
@@ -40,6 +41,7 @@ import {
   isPickKind,
   isSignatureInput,
   isSafeLocalPath,
+  renameTarget,
   sanitizeFileName,
   validateAuthorName,
   validateGlassRegions,
@@ -302,6 +304,17 @@ export function registerIpc(ctx: IpcContext): void {
     }
     const reopened = await ctx.files.reopen(fileId, owner);
     return reopened.ok ? { ok: true, file: reopened.file } : { ok: false, error: 'write-failed', detail: reopened.error };
+  });
+
+  // Umbenennen im selben Ordner. Ein neues leeres Dokument hat noch keinen festen Ort: erst „Sichern“.
+  handle(IPC.renameFile, async (event, fileId: unknown, name: unknown): Promise<RenameResult> => {
+    if (!isFileId(fileId)) return { ok: false, error: 'unknown-file' };
+    const target = renameTarget(name);
+    if (!target) return { ok: false, error: 'invalid-name' };
+    const current = ctx.files.pathOf(fileId, event.sender.id);
+    if (!current) return { ok: false, error: 'unknown-file' };
+    if (isBlankDocumentPath(current)) return { ok: false, error: 'untitled' };
+    return ctx.files.rename(fileId, event.sender.id, target);
   });
 
   handle(IPC.saveFileAs, async (event, fileId: unknown, bytes: unknown): Promise<SaveResult> => {
