@@ -432,3 +432,26 @@ test('Text unter einem später gezeichneten Bild lässt sich bearbeiten; Doppelk
   await close();
   removeTempDir(dir);
 });
+
+test('Stromsparen: Lichtschein ruht, Glas ohne Lichtbrechung, keine Neuberechnung beim Bewegen der Maus', async () => {
+  const { page, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  // Wie „Transparenz reduzieren“ in macOS (im Akkubetrieb geschieht dasselbe)
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-transparency', value: 'reduce' }] });
+  await expect(page.locator('html[data-energy-saving]')).toHaveCount(1);
+  const glass = page.locator('.liquid').first();
+  await expect(glass).toBeAttached();
+  expect(await glass.evaluate((element) => element.style.getPropertyValue('backdrop-filter'))).not.toContain('url(');
+  await cdp.send('Performance.enable');
+  const styleCount = async () => (await cdp.send('Performance.getMetrics')).metrics.find((m) => m.name === 'RecalcStyleCount')?.value ?? 0;
+  const box = await page.locator('.pdfViewer .page').first().boundingBox();
+  if (!box) throw new Error('Seite ohne Größe');
+  const before = await styleCount();
+  for (let i = 0; i < 60; i++) await page.mouse.move(box.x + 40 + i * 6, box.y + 120);
+  await page.waitForTimeout(200);
+  expect((await styleCount()) - before).toBeLessThan(15);
+  expect(await page.evaluate(() => document.documentElement.style.getPropertyValue('--pointer-x'))).toBe('');
+  await close();
+});
+
