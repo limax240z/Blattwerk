@@ -58,6 +58,28 @@ describe('Zeilen aus der Erkennung', () => {
   });
 });
 
+describe('Papierkante und Lochung sind keine Wörter', () => {
+  const bbox = (x0: number, x1: number, y0 = 10, y1 = 40) => ({ x0, y0, x1, y1 });
+  const line = (...words: Array<[string, number, number]>): OcrBlock[] => [
+    { paragraphs: [{ lines: [{ baseline: { x0: 0, y0: 40, x1: 900, y1: 40 }, bbox: bbox(0, 900), words: words.map(([text, x0, x1]) => ({ text, confidence: 90, bbox: bbox(x0, x1) })) }] }] },
+  ];
+  const texts = (blocks: OcrBlock[]) => selectableLines(blocks).flatMap((l) => l.words.map((w) => w.text));
+
+  it('entfernt allein stehende Zeichen links und rechts der Zeile', () => {
+    expect(texts(line(['>', 10, 40], ['Ich', 300, 360], ['bin', 375, 430], ['|', 800, 804]))).toEqual(['Ich', 'bin']);
+    expect(texts(line(['{', 800, 806]))).toEqual([]);
+  });
+
+  it('lässt Satzzeichen und kurze Wörter im Text stehen', () => {
+    expect(texts(line(['Wort', 100, 180], ['–', 195, 215], ['a', 230, 245], ['Ende', 260, 340]))).toEqual(['Wort', '–', 'a', 'Ende']);
+  });
+
+  it('einzelne Ziffern bleiben (Seitenzahl), einzelne Buchstaben ohne Nachbarn nicht', () => {
+    expect(texts(line(['7', 400, 420]))).toEqual(['7']);
+    expect(texts(line(['l', 800, 804]))).toEqual([]);
+  });
+});
+
 describe('Abgleich mit echtem Text', () => {
   const word = { topLeft: { x: 100, y: 520 }, topRight: { x: 160, y: 520 }, bottomLeft: { x: 100, y: 500 } };
   it('Wort über echtem Text gilt als vorhanden', () => {

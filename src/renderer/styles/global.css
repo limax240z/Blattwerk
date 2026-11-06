@@ -121,6 +121,18 @@ input:is([type='radio'], [type='checkbox']):focus-visible {
   pointer-events: none;
 }
 
+/* Live-Text: Die Auswahl zeichnet paintLiveSelection als Streifen je Zeile, nicht der Browser Wort für Wort */
+.pdfViewer .textLayer[data-live-text] ::selection {
+  background: transparent;
+}
+
+.pdfViewer .textLayer .liveSelection {
+  position: absolute;
+  z-index: 0;
+  background: color-mix(in srgb, AccentColor, transparent 62%);
+  pointer-events: none;
+}
+
 /* Trefferfarben der Suche an das eigene Design anpassen */
 .pdfViewer .textLayer .highlight {
   --highlight-bg-color: var(--color-match);
