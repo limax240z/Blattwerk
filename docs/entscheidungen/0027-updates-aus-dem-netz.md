@@ -11,7 +11,7 @@ gehen. Ergänzt [0025](0025-updates.md), das neue Versionen nur aus einem Ordner
   gesperrt. Ab 0.16.2 gilt das neue Konto `limax240z`. Ältere Installationen finden dort nichts und brauchen die erste
   Version vom neuen Konto einmal von Hand.
 - **Mac ohne CI (seit 0.16.2):** Das neue Konto bekam von GitHub keine Mac-Rechner (jeder Mac-Auftrag brach nach
-  15 Minuten Warten ab, Windows lief). Mit der Projektvariable `MAC_IN_CI = false` laufen in CI nur die Windows-Teile.
+  15 Minuten Warten ab, Windows lief). Mit der Projektvariable `MAC_IN_CI = false` laufen in CI nur die Windows-Teile. Nachtrag 2026-11-05: Intel-Macs (`macos-15-intel`) teilt GitHub sofort zu, Apple-Silicon-Macs weiterhin nicht; CI baut die Mac-Pakete deshalb auf Intel für beide Mac-Arten, `MAC_IN_CI = true`.
   Die Mac-Tests laufen dann vor jeder Version auf dem eigenen Mac (vollständige Testreihe), und
   `npm run publish:mac` baut die Mac-Pakete dort, prüft die Signatur wie die CI und legt sie in das Release
   (legt es an, falls der CI-Job noch nicht so weit ist; der Job ergänzt dann nur die Windows-Datei). Bekommt das Konto
