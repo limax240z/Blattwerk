@@ -628,6 +628,37 @@ test('Live-Text: Text im Scan auswählen und markieren, ohne die Datei zu änder
   await close();
 });
 
+test('Zoomen mit Markierungen: Überblendung ruht während des Zoomens und kommt danach zurück', async () => {
+  const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
+  tempDirs.push(userData);
+  const file = path.join(userData, 'kopie-zoom.pdf');
+  copyFileSync(fixture('text.pdf'), file);
+  const { page, close } = await launchApp([file], { userData });
+  await waitForDocument(page, TEXT_PDF.pages);
+  await page.getByTestId('sidebar-comments').click();
+  await page.getByTestId('highlight-button').click();
+  await expect(page.getByTestId('mark-toolbar')).toBeVisible();
+  await selectText(page, 'Testdokument für Blattwerk');
+  await expect(cards(page)).toHaveCount(1);
+  const mark = page.getByTestId('annotation-overlay-0').locator('[data-blend]').first();
+  const blend = () => mark.evaluate((element) => getComputedStyle(element).mixBlendMode);
+  await expect.poll(blend).toBe('multiply');
+  // Trackpad: viele Ereignisse hintereinander
+  const zooming = await page.getByTestId('viewer-container').evaluate(async (element) => {
+    const box = element.getBoundingClientRect();
+    const seen: string[] = [];
+    for (let i = 0; i < 20; i++) {
+      element.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -2, deltaMode: 0, clientX: box.left + 200, clientY: box.top + 200, bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 8));
+      seen.push(getComputedStyle(element.querySelector('[data-blend]') as Element).mixBlendMode);
+    }
+    return seen;
+  });
+  expect(new Set(zooming)).toEqual(new Set(['normal']));
+  await expect.poll(blend).toBe('multiply');
+  await close();
+});
+
 test('Hervorheben ohne Text darunter malt wie ein Textmarker', async () => {
   const userData = mkdtempSync(path.join(tmpdir(), 'blattwerk-e2e-'));
   tempDirs.push(userData);
