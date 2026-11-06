@@ -2,6 +2,8 @@
 // und Wörtern gäbe es dort nichts zu treffen; die Auswahl bliebe stehen oder fiele zusammen. Darum folgt sie dort der
 // nächstgelegenen Textstelle. Die Ebene mit Live-Text bekommt beim Ziehen dieselbe Abdeckung wie die von pdf.js
 // (Klasse „selecting“ mit .endOfContent), die pdf.js für sie nicht verwaltet.
+import type { Rect } from '../../../shared/annotations';
+import { quadsFromRects } from './geometry';
 import { caretAt, rangeBetween, type Caret } from './text-caret';
 import { misplacedRuns } from './text-order';
 
@@ -39,6 +41,58 @@ function distanceToCaret({ node }: Caret, x: number, y: number): number {
 }
 
 const isText = (target: EventTarget | null) => target instanceof Element && target.closest('.textLayer span') !== null;
+
+// Auswahl im Live-Text: Dort ist jedes Wort ein eigenes Stück, der Browser zeichnete die Auswahl deshalb Wort für Wort. Sie
+// wird stattdessen als ein durchgehender Streifen je Zeile gezeichnet (wie die Markierung, die daraus entsteht).
+export function paintLiveSelection(container: HTMLElement): () => void {
+  let frame = 0;
+  const paint = () => {
+    frame = 0;
+    const selection = window.getSelection();
+    const ranges: Range[] = [];
+    if (selection && !selection.isCollapsed) for (let i = 0; i < selection.rangeCount; i++) ranges.push(selection.getRangeAt(i));
+    for (const layer of container.querySelectorAll<HTMLElement>('.textLayer[data-live-text]')) {
+      for (const bar of layer.querySelectorAll('.liveSelection')) bar.remove();
+      const box = layer.getBoundingClientRect();
+      if (ranges.length === 0 || box.width === 0) continue;
+      const rects: Rect[] = [];
+      for (const span of layer.querySelectorAll('span')) {
+        const node = span.firstChild;
+        const text = node?.textContent ?? '';
+        if (!(node instanceof Text) || text.trim() === '') continue;
+        for (const range of ranges) {
+          if (!range.intersectsNode(node)) continue;
+          const part = document.createRange();
+          part.setStart(node, node === range.startContainer ? range.startOffset : 0);
+          part.setEnd(node, node === range.endContainer ? range.endOffset : text.length);
+          if (part.collapsed) continue;
+          const { left, top, right, bottom } = part.getBoundingClientRect();
+          rects.push([left, top, right, bottom]);
+        }
+      }
+      for (const quad of quadsFromRects(rects)) {
+        const [topLeft, , , bottomRight] = quad;
+        if (!topLeft || !bottomRight) continue;
+        const bar = document.createElement('div');
+        bar.className = 'liveSelection';
+        // Rechtecke in Bildschirmkoordinaten: y wächst nach unten, die kleinere Zahl ist also die Oberkante
+        bar.style.left = `${((topLeft.x - box.left) / box.width) * 100}%`;
+        bar.style.width = `${((bottomRight.x - topLeft.x) / box.width) * 100}%`;
+        bar.style.top = `${((bottomRight.y - box.top) / box.height) * 100}%`;
+        bar.style.height = `${((topLeft.y - bottomRight.y) / box.height) * 100}%`;
+        layer.append(bar);
+      }
+    }
+  };
+  const schedule = () => {
+    frame ||= requestAnimationFrame(paint);
+  };
+  document.addEventListener('selectionchange', schedule);
+  return () => {
+    document.removeEventListener('selectionchange', schedule);
+    if (frame) cancelAnimationFrame(frame);
+  };
+}
 
 export function followSelectionDrag(container: HTMLElement): () => void {
   let dragging = false;

@@ -7,6 +7,9 @@ import styles from './ViewerHost.module.css';
 import { PageFlipAccumulator, SCROLL_MODE, wheelDeltaPixels } from './view-modes';
 import { PinchAccumulator, wheelZoomIntent } from './zoom';
 
+// So lange nach dem letzten Zoomschritt wird die Seite scharf neu gezeichnet (bis dahin nur skaliert)
+const ZOOM_REDRAW_MS = 150;
+
 // Bindet die pdf.js-Seitenansicht in React ein. pdf.js verwaltet den Inhalt des Containers selbst.
 export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,6 +49,19 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
       }
     };
 
+    let pendingFactor = 1;
+    let pendingOrigin: number[] = [0, 0];
+    let zoomFrame = 0;
+    const applyPinch = () => {
+      zoomFrame = 0;
+      const viewer = runtime.viewer;
+      const collected = pendingFactor;
+      pendingFactor = 1;
+      if (!viewer) return;
+      const factor = pinch.add(viewer.currentScale, collected);
+      if (factor !== null) viewer.updateScale({ scaleFactor: factor, origin: pendingOrigin, drawingDelay: ZOOM_REDRAW_MS });
+    };
+
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey && !event.metaKey) {
         flipPages(event);
@@ -60,11 +76,13 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
       const origin = [event.clientX - rect.left + container.offsetLeft, event.clientY - rect.top + container.offsetTop];
       const intent = wheelZoomIntent(event);
       if (intent.kind === 'factor') {
-        const factor = pinch.add(viewer.currentScale, intent.factor);
-        if (factor !== null) viewer.updateScale({ scaleFactor: factor, origin, drawingDelay: 300 });
+        // Das Trackpad meldet weit über 100 Ereignisse je Sekunde, gezeichnet wird nur einmal je Bild: sammeln
+        pendingFactor *= intent.factor;
+        pendingOrigin = origin;
+        zoomFrame ||= requestAnimationFrame(applyPinch);
       } else {
         pinch.reset();
-        viewer.updateScale({ steps: intent.steps, origin, drawingDelay: 300 });
+        viewer.updateScale({ steps: intent.steps, origin, drawingDelay: ZOOM_REDRAW_MS });
       }
     };
     container.addEventListener('wheel', onWheel, { passive: false });
@@ -81,6 +99,7 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
 
     return () => {
       container.removeEventListener('wheel', onWheel);
+      if (zoomFrame) cancelAnimationFrame(zoomFrame);
       container.removeEventListener('input', onFormInput);
       container.removeEventListener('change', onFormInput);
       container.removeEventListener('click', onFormInput);

@@ -35,6 +35,14 @@ Zeilenlücke von 450 Zeichen auf 0, weil Live-Text keine Abdeckung wie `.endOfCo
 Seiten klappte sie um, sobald der Zeiger eine Fußzeile erreichte, die im PDF vorn steht. Behoben mit
 `annotations/selection-drag.ts` und `annotations/text-order.ts`.
 
+## Nachtrag 2026-11-05: Papierkanten und Darstellung der Auswahl
+
+Fehlerbericht mit einem echten Scan (Rede Kennedy, 2 Seiten ohne Textebene): Auswahl und Markierung reichten bis an den
+Seitenrand, die Auswahl zerfiel in Wortkästchen. Gemessen: Die Erkennung las die Papierkante in fast jeder Zeile als `|`
+oder `{` und eine Lochung als `>`; 27 von 474 „Wörtern“ waren solche Scheinwörter und gehörten zur Zeile. `selectableLines`
+verwirft sie jetzt (`isDebris`): keine Buchstaben oder Ziffern (oder ein einzelner Buchstabe) und mehr als 2,5 Zeilenhöhen
+von allen anderen Wörtern entfernt. Die Auswahl zeichnet `paintLiveSelection` als Streifen je Zeile.
+
 ## Grenzen
 
 - Quer oder kopfüber fotografierter Text wird nicht erkannt (keine Lageerkennung); schräge Fotos nur ungefähr.

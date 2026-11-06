@@ -19,7 +19,7 @@ import { useLiveText } from '../live-text/useLiveText';
 import { clipPath, isMovable, pageRect, quadsFromRects, translate } from './geometry';
 import styles from './PageOverlay.module.css';
 import { PageOverlay } from './PageOverlay';
-import { followSelectionDrag, repairTextOrder } from './selection-drag';
+import { followSelectionDrag, paintLiveSelection, repairTextOrder } from './selection-drag';
 import { selectedTextRects } from './text-selection';
 
 // Pfeiltaste → Richtung in der Ansicht (x nach rechts, y nach unten)
@@ -378,7 +378,13 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
   // Textauswahl über mehrere Zeilen: In den Lücken folgt sie der nächsten Textstelle
   useEffect(() => {
     const container = getRuntime(tabId)?.container;
-    return container ? followSelectionDrag(container) : undefined;
+    if (!container) return;
+    const stopFollowing = followSelectionDrag(container);
+    const stopPainting = paintLiveSelection(container);
+    return () => {
+      stopFollowing();
+      stopPainting();
+    };
   }, [tabId, pagesReady]);
 
   // Klick neben einen Kommentar hebt die Auswahl auf. Klicks auf der eigenen Ebene (Kommentar, Griff,

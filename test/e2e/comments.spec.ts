@@ -597,6 +597,20 @@ test('Live-Text: Text im Scan auswählen und markieren, ohne die Datei zu änder
   expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toContain('Testdokument');
   await page.evaluate(() => window.getSelection()?.removeAllRanges());
 
+  // Auswahl als durchgehender Streifen je Zeile, nicht Wort für Wort
+  const lines = page.locator('[data-page-number="1"] .textLayer[data-live-text] span');
+  const firstLine = await word.boundingBox();
+  const lastWord = await lines.last().boundingBox();
+  if (!firstLine || !lastWord) throw new Error('Text ohne Größe');
+  await drag(page, { x: firstLine.x + 1, y: firstLine.y + firstLine.height / 2 }, { x: lastWord.x + lastWord.width - 1, y: lastWord.y + lastWord.height / 2 });
+  await expect.poll(() => page.locator('.liveSelection').count()).toBeGreaterThan(1);
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  await expect(page.locator('.liveSelection')).toHaveCount(0);
+  // Die lange Auswahl hat die Seite mitgescrollt
+  await page.getByTestId('viewer-container').evaluate((element) => {
+    element.scrollTop = 0;
+  });
+
   // Markieren: Hervorhebung genau über dem Wort
   await page.getByTestId('highlight-button').click();
   await expect(page.getByTestId('mark-toolbar')).toBeVisible();

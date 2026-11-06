@@ -131,6 +131,19 @@ export interface SelectableLine {
   words: Array<{ text: string; left: number; right: number }>;
 }
 
+// So weit (in Zeilenhöhen) darf ein Zeichen ohne Buchstaben von den übrigen Wörtern der Zeile entfernt sein
+const NEIGHBOUR_REACH = 2.5;
+
+// Papierkanten, Lochungen und Flecken liest die Erkennung als einzelne Zeichen („|“, „{“, „>“), oft in fast jeder Zeile.
+// Als Wörter ließen sie Auswahl und Markierung bis an den Rand der Seite reichen. Solche Stücke stehen allein: ohne
+// Buchstaben oder Ziffern, oder ein einzelner Buchstabe, und weit weg von allem anderen in der Zeile.
+function isDebris(text: string, left: number | null, right: number | null, reach: number): boolean {
+  const near = (left !== null && left <= reach) || (right !== null && right <= reach);
+  if (near) return false;
+  if (!/[\p{L}\p{N}]/u.test(text)) return true;
+  return text.length === 1 && !/\p{N}/u.test(text);
+}
+
 export function selectableLines(blocks: OcrBlock[] | null): SelectableLine[] {
   const lines: SelectableLine[] = [];
   for (const block of blocks ?? []) {
@@ -140,11 +153,18 @@ export function selectableLines(blocks: OcrBlock[] | null): SelectableLine[] {
           .map((word) => ({ ...word, text: [...word.text.normalize('NFC')].map((char) => LIGATURES[char] ?? char).join('').trim() }))
           .filter((word) => word.text !== '' && word.confidence >= MIN_CONFIDENCE && word.bbox.x1 > word.bbox.x0 && word.bbox.y1 > word.bbox.y0)
           .sort((a, b) => a.bbox.x0 - b.bbox.x0);
-        if (words.length === 0) continue;
+        const heights = words.map((word) => word.bbox.y1 - word.bbox.y0).sort((a, b) => a - b);
+        const reach = (heights[Math.floor(heights.length / 2)] ?? 0) * NEIGHBOUR_REACH;
+        const kept = words.filter((word, i) => {
+          const before = words[i - 1];
+          const after = words[i + 1];
+          return !isDebris(word.text, before ? word.bbox.x0 - before.bbox.x1 : null, after ? after.bbox.x0 - word.bbox.x1 : null, reach);
+        });
+        if (kept.length === 0) continue;
         lines.push({
-          top: Math.min(...words.map((word) => word.bbox.y0)),
-          bottom: Math.max(...words.map((word) => word.bbox.y1)),
-          words: words.map((word) => ({ text: word.text, left: word.bbox.x0, right: word.bbox.x1 })),
+          top: Math.min(...kept.map((word) => word.bbox.y0)),
+          bottom: Math.max(...kept.map((word) => word.bbox.y1)),
+          words: kept.map((word) => ({ text: word.text, left: word.bbox.x0, right: word.bbox.x1 })),
         });
       }
     }
