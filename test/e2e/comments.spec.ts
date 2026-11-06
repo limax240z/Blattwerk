@@ -606,6 +606,10 @@ test('Live-Text: Text im Scan auswählen und markieren, ohne die Datei zu änder
   await expect.poll(() => page.locator('.liveSelection').count()).toBeGreaterThan(1);
   await page.evaluate(() => window.getSelection()?.removeAllRanges());
   await expect(page.locator('.liveSelection')).toHaveCount(0);
+  // Die lange Auswahl hat die Seite mitgescrollt
+  await page.getByTestId('viewer-container').evaluate((element) => {
+    element.scrollTop = 0;
+  });
 
   // Markieren: Hervorhebung genau über dem Wort
   await page.getByTestId('highlight-button').click();
