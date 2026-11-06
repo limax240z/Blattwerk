@@ -25,7 +25,7 @@ export function AnnotationShape({ annotation: a, geometry }: { annotation: Annot
   switch (a.kind) {
     case 'highlight':
       return (
-        <g opacity={a.opacity} style={{ mixBlendMode: 'multiply' }}>
+        <g opacity={a.opacity} data-blend="">
           {a.quads.map((q, i) => (
             <polygon key={i} points={points(geometry, [q[0], q[1], q[3], q[2]])} fill={color} />
           ))}

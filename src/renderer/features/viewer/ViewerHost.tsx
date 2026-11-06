@@ -9,6 +9,8 @@ import { PinchAccumulator, wheelZoomIntent } from './zoom';
 
 // So lange nach dem letzten Zoomschritt wird die Seite scharf neu gezeichnet (bis dahin nur skaliert)
 const ZOOM_REDRAW_MS = 150;
+// So lange danach bleibt die vereinfachte Darstellung, damit sie nicht zwischen zwei Fingerbewegungen zurückspringt
+const ZOOM_SETTLE_MS = 100;
 
 // Bindet die pdf.js-Seitenansicht in React ein. pdf.js verwaltet den Inhalt des Containers selbst.
 export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) {
@@ -49,6 +51,14 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
       }
     };
 
+    // Solange gezoomt wird, liegt data-zooming am Bereich: Teure Überblendungen ruhen dann (global.css)
+    let zoomEnd = 0;
+    const markZooming = () => {
+      container.dataset.zooming = '';
+      window.clearTimeout(zoomEnd);
+      zoomEnd = window.setTimeout(() => delete container.dataset.zooming, ZOOM_REDRAW_MS + ZOOM_SETTLE_MS);
+    };
+
     let pendingFactor = 1;
     let pendingOrigin: number[] = [0, 0];
     let zoomFrame = 0;
@@ -70,6 +80,7 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
       event.preventDefault();
       const viewer = runtime.viewer;
       if (!viewer) return;
+      markZooming();
       // pdf.js rechnet den Anker relativ zum offsetParent des Containers (containerTopLeft).
       // Mauskoordinaten deshalb in dieses Koordinatensystem umrechnen.
       const rect = container.getBoundingClientRect();
@@ -100,6 +111,7 @@ export function ViewerHost({ tab, active }: { tab: TabState; active: boolean }) 
     return () => {
       container.removeEventListener('wheel', onWheel);
       if (zoomFrame) cancelAnimationFrame(zoomFrame);
+      window.clearTimeout(zoomEnd);
       container.removeEventListener('input', onFormInput);
       container.removeEventListener('change', onFormInput);
       container.removeEventListener('click', onFormInput);

@@ -133,6 +133,21 @@ input:is([type='radio'], [type='checkbox']):focus-visible {
   pointer-events: none;
 }
 
+/* Hervorhebungen mischen sich mit der Seite (der Text darunter bleibt dunkel). Das zwingt den Browser, Seite und
+   Markierungen bei jeder Änderung neu zu verrechnen; während des Zoomens stockte das sichtbar. Dann (data-zooming am
+   Bereich des Dokuments, ViewerHost) nur durchscheinend, danach wieder genau. */
+[data-blend] {
+  mix-blend-mode: multiply;
+}
+
+[data-zooming] [data-blend] {
+  mix-blend-mode: normal;
+}
+
+[data-zooming] [data-blend] > * {
+  fill-opacity: 0.45;
+}
+
 /* Trefferfarben der Suche an das eigene Design anpassen */
 .pdfViewer .textLayer .highlight {
   --highlight-bg-color: var(--color-match);
