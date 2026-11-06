@@ -27,6 +27,8 @@ Entschieden am 2026-10-12: PDFium-WASM + pdf.js ([0001](docs/entscheidungen/0001
 
 ## Arbeitsweise (verbindlich)
 
+- **Öffentliches Projekt (seit 2026-11-06):** Quelltext und Historie sind für alle sichtbar. Vor jedem Commit darauf achten, dass keine Zugangsdaten, Schlüssel, persönlichen Daten oder internen Adressen hineingeraten; Geheimnisse nur als Actions-Secrets. Vor Uploads mit `gitleaks` prüfen.
+
 - **Testumfang (Auftraggeber, 2026-10-15):** Kleine Änderungen nur gezielt testen (neue und betroffene Oberflächentests mit `-g`, dazu Typprüfung, Lint, `npm test`). Die komplette E2E-Suite vor jeder neuen `.dmg`/Version und nach größeren Umbauten.
 - Strikt Phase für Phase. **Fertig** heißt: App startet, alle Features der Phase funktionieren, `npm test` und E2E-Tests sind grün, Git-Commit existiert.
 - Nach jeder Phase: Bericht in `docs/phasen/phase-N.md` (was geht, was nicht, bekannte Bugs). Ab Phase 2 ohne Warten weiter (siehe oben).

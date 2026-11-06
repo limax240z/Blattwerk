@@ -30,3 +30,33 @@ src/renderer/public/
 ios/build/
 ios/Blattwerk.xcodeproj/xcuserdata/
 ios/Blattwerk.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Zugangsdaten und Schlüssel dürfen nie ins (öffentliche) Projekt
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+*.provisionprofile
+credentials.json
+service-account*.json
+secrets.y*ml
+.npmrc
+.pypirc
+# Erfundenes Testzertifikat (Erika Mustermann), gebraucht von den Signaturtests
+!test/fixtures/certs/test-id.p12
+
+# Lokale Daten
+*.log
+*.sql
+*.sqlite
+*.db
+*.dump
+.claude/
+AGENTS.md

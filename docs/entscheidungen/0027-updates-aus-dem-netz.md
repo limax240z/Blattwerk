@@ -52,6 +52,14 @@ je Stunde und Internetanschluss erlaubt. Der Zeitgeber prüft alle 5 Minuten, ob
 dem Ruhezustand nicht ausfällt. Weggeklickte Hinweise bleiben für diese Version weg (`dismissed`); nur die Suche von
 Hand zeigt sie wieder.
 
+## Nachtrag 2026-11-06: Quelltext öffentlich
+
+Das Gratis-Kontingent für GitHub Actions privater Projekte (2.000 Minuten, Mac zählt zehnfach) war nach dem Einschalten der
+Mac-Aufträge aufgebraucht. Der Auftraggeber hat `limax240z/Blattwerk` deshalb öffentlich gestellt; Actions sind dort
+ohne Monatsgrenze. Vorher geprüft: gesamte Git-Historie mit gitleaks und eigener Mustersuche (keine Funde), persönliche
+Daten, Binärdateien, Issues, Pull-Request-Texte. Geheimnisse liegen nur als Actions-Secrets vor. Beiträge von außen laufen
+in der CI erst nach Freigabe, `.gitignore` schließt Schlüssel und `.env`-Dateien aus.
+
 ## Verworfen
 
 - **Privates Projekt direkt:** Releases privater Projekte gibt GitHub nur mit Zugangsdaten heraus.
