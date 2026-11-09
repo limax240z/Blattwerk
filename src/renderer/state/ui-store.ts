@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { FileKind, RecentFile } from '../../shared/ipc';
+import type { AppSettings, FileKind, RecentFile } from '../../shared/ipc';
 import type { ImageInfo } from '../../shared/image-info';
 
 // Gelesene Quelldatei zum Einfügen oder Zusammenführen (Bytes im Speicher, Kennwort bereits geprüft)
@@ -61,6 +61,8 @@ interface UiState {
   searchFocusHandled: number;
   // Name für neue Kommentare (aus den Einstellungen)
   authorName: string;
+  // Lesemodus mit Vollbild (aus den Einstellungen)
+  readModeFullscreen: boolean;
   commentToolsVisible: boolean;
   // Leiste „Schwärzen“ (Phase 5) und ihre Dialoge
   redactToolsVisible: boolean;
@@ -115,6 +117,7 @@ interface UiState {
   requestSearchFocus: () => void;
   markSearchFocusHandled: (request: number) => void;
   setAuthorName: (name: string) => void;
+  applySettings: (settings: AppSettings) => void;
   setCommentToolsVisible: (visible: boolean) => void;
   setRedactToolsVisible: (visible: boolean) => void;
   setMarkToolsVisible: (visible: boolean) => void;
@@ -162,6 +165,7 @@ export const useUi = create<UiState>((set) => ({
   searchFocusRequest: 0,
   searchFocusHandled: 0,
   authorName: '',
+  readModeFullscreen: true,
   commentToolsVisible: false,
   markToolsVisible: false,
   redactToolsVisible: false,
@@ -200,6 +204,7 @@ export const useUi = create<UiState>((set) => ({
     set((state) => ({ rightPanelVisible: true, searchFocusRequest: state.searchFocusRequest + 1 })),
   markSearchFocusHandled: (request) => set({ searchFocusHandled: request }),
   setAuthorName: (authorName) => set({ authorName }),
+  applySettings: ({ authorName, readModeFullscreen }) => set({ authorName, readModeFullscreen }),
   // Kommentieren und Schwärzen nutzen dieselbe Ebene; es ist immer nur eine der beiden Leisten offen.
   // Höchstens eine der Leisten „Kommentieren“, „Schwärzen“ und „Markieren“ ist offen
   setCommentToolsVisible: (commentToolsVisible) =>

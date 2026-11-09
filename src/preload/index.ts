@@ -94,6 +94,7 @@ const api: BlattwerkApi = {
   },
   getSettings: () => ipcRenderer.invoke(IPC.settingsGet),
   setAuthorName: (name) => ipcRenderer.invoke(IPC.settingsSetAuthor, name),
+  setReadModeFullscreen: (on) => ipcRenderer.invoke(IPC.settingsSetReadModeFullscreen, on),
   confirmClose: () => ipcRenderer.send(IPC.closeConfirmed),
   cancelClose: () => ipcRenderer.send(IPC.closeCancelled),
   closeWindow: () => ipcRenderer.send(IPC.closeWindow),

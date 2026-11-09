@@ -19,6 +19,8 @@ export interface SettingsData {
   updateFolder: string | null;
   // Letzte Suche nach einer neuen Version im Netz (ms seit 1970), ADR 0027
   lastUpdateCheck?: number;
+  // false = Lesemodus ohne Vollbild; fehlt = mit Vollbild
+  readModeFullscreen?: boolean;
 }
 
 function isRect(value: unknown): value is Rectangle {
@@ -36,6 +38,7 @@ function validateSettings(raw: unknown): SettingsData | null {
     lastIdPath?: unknown;
     updateFolder?: unknown;
     lastUpdateCheck?: unknown;
+    readModeFullscreen?: unknown;
   };
   if (data.version !== 1 || typeof data.window !== 'object' || data.window === null) return null;
   const author = typeof data.authorName === 'string' ? data.authorName.trim().slice(0, 200) : '';
@@ -49,6 +52,7 @@ function validateSettings(raw: unknown): SettingsData | null {
     lastIdPath: typeof data.lastIdPath === 'string' && path.isAbsolute(data.lastIdPath) && data.lastIdPath.length < 4096 ? data.lastIdPath : null,
     updateFolder: typeof data.updateFolder === 'string' && path.isAbsolute(data.updateFolder) && data.updateFolder.length < 4096 ? data.updateFolder : null,
     ...(typeof data.lastUpdateCheck === 'number' && Number.isFinite(data.lastUpdateCheck) ? { lastUpdateCheck: data.lastUpdateCheck } : {}),
+    ...(typeof data.readModeFullscreen === 'boolean' ? { readModeFullscreen: data.readModeFullscreen } : {}),
   };
 }
 

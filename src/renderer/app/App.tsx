@@ -131,7 +131,7 @@ export function App() {
     const offReceived = api.onTabReceived((message) => void receiveTab(message));
     const offMerge = api.onMergeRequest(() => void giveAllTabs());
     refreshRecent();
-    void api.getSettings().then((settings) => useUi.getState().setAuthorName(settings.authorName));
+    void api.getSettings().then((settings) => useUi.getState().applySettings(settings));
     api.signalReady();
     return () => {
       offOpened();

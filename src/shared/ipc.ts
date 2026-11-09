@@ -21,6 +21,7 @@ export const IPC = {
   fileRenamed: 'file:renamed',
   settingsGet: 'settings:get',
   settingsSetAuthor: 'settings:set-author',
+  settingsSetReadModeFullscreen: 'settings:set-read-mode-fullscreen',
   // Phase 3: Quelldateien wählen (PDFs, Bilder) und neue Dokumente speichern
   pickFiles: 'files:pick',
   registerDropped: 'files:register-dropped',
@@ -295,6 +296,8 @@ export interface RenamedInfo {
 
 export interface AppSettings {
   authorName: string;
+  // Lesemodus schaltet das Fenster in den Vollbildmodus (Mac und Windows; auf dem iPad gibt es keinen)
+  readModeFullscreen: boolean;
 }
 
 export interface AppInfo {

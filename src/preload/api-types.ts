@@ -126,6 +126,7 @@ export interface BlattwerkApi {
   };
   getSettings(): Promise<AppSettings>;
   setAuthorName(name: string): Promise<AppSettings>;
+  setReadModeFullscreen(on: boolean): Promise<AppSettings>;
   confirmClose(): void;
   cancelClose(): void;
   onRequestClose(listener: () => void): () => void;

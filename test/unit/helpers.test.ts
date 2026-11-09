@@ -13,7 +13,7 @@ import { layoutForMode, isPagedMode, PageFlipAccumulator, wheelDeltaPixels } fro
 import {
   clampScale,
   parsePercentInput,
-  PinchAccumulator,
+  pinchShift,
   wheelZoomIntent,
 } from '../../src/renderer/features/viewer/zoom';
 import { matchRendererShortcut } from '../../src/shared/shortcuts';
@@ -86,13 +86,26 @@ describe('Zoom', () => {
     expect(clampScale(0.01)).toBe(0.1);
     expect(clampScale(100)).toBe(25);
   });
-  it('sammelt kleine Pinch-Schritte, bis sie sichtbar werden', () => {
-    const pinch = new PinchAccumulator();
-    expect(pinch.add(1, 1.002)).toBeNull();
-    expect(pinch.add(1, 1.002)).toBeNull();
-    const applied = pinch.add(1, 1.002);
-    expect(applied).not.toBeNull();
-    expect(applied as number).toBeCloseTo(1.002 ** 3, 6);
+  it('Pinch-Vorschau: hält den Punkt unter dem Zeiger fest', () => {
+    // Inhalt 0–3000, Ansicht 1000–1800, Zeiger bei 1400
+    const axis = { pointer: 1400, origin: 0, contentStart: 0, contentEnd: 3000, viewStart: 1000, viewSize: 800, centerWhenFits: false };
+    const shift = pinchShift(1.5, axis);
+    expect(0 + 1400 * 1.5 + shift).toBeCloseTo(1400, 6);
+  });
+  it('Pinch-Vorschau: kein leerer Rand am Anfang oder Ende', () => {
+    // ganz oben verkleinern: der Anfang bleibt oben in der Ansicht
+    const top = { pointer: 400, origin: 0, contentStart: 0, contentEnd: 3000, viewStart: 0, viewSize: 800, centerWhenFits: false };
+    expect(pinchShift(0.8, top)).toBeCloseTo(0, 6);
+    // ganz unten verkleinern: das Ende bleibt unten
+    const bottom = { ...top, pointer: 2600, viewStart: 2200 };
+    const shift = pinchShift(0.8, bottom);
+    expect(3000 * 0.8 + shift).toBeCloseTo(3000, 6);
+  });
+  it('Pinch-Vorschau: passt der Inhalt in die Ansicht, steht er waagrecht in der Mitte', () => {
+    // Seite 100–900 in einer 1000 breiten Ansicht, auf die Hälfte verkleinert, Zeiger am linken Rand
+    const axis = { pointer: 150, origin: 0, contentStart: 100, contentEnd: 900, viewStart: 0, viewSize: 1000, centerWhenFits: true };
+    const shift = pinchShift(0.5, axis);
+    expect((100 * 0.5 + shift + 900 * 0.5 + shift) / 2).toBeCloseTo(500, 6);
   });
   it('unterscheidet Trackpad und Mausrad', () => {
     expect(wheelZoomIntent({ deltaY: -3, deltaMode: 0 })).toMatchObject({ kind: 'factor' });

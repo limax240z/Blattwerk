@@ -46,9 +46,13 @@ export function ReadModeBar() {
   }, []);
 
   return (
-    <button type="button" className={[styles.exit, shown ? '' : styles.hidden].join(' ')} onClick={exitReadMode} data-testid="read-mode-exit">
-      <X size={14} strokeWidth={2} aria-hidden="true" />
-      {t('readMode.exit')}
-    </button>
+    <>
+      {/* macOS ohne Vollbild: Die Werkzeugleiste (zugleich Titelleiste) ist weg, oben bleibt ein Streifen zum Verschieben */}
+      <div className={styles.dragStrip} data-drag-region aria-hidden="true" />
+      <button type="button" className={[styles.exit, shown ? '' : styles.hidden].join(' ')} onClick={exitReadMode} data-testid="read-mode-exit">
+        <X size={14} strokeWidth={2} aria-hidden="true" />
+        {t('readMode.exit')}
+      </button>
+    </>
   );
 }

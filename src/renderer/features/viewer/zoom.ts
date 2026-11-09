@@ -30,25 +30,6 @@ export function parsePercentInput(input: string): number | null {
   return clampScale(percent / 100);
 }
 
-// Sammelt kleine Zoom-Faktoren (Trackpad-Pinch), bis sie eine sichtbare Änderung ergeben.
-// pdf.js rundet Maßstäbe auf zwei Nachkommastellen; einzelne Pinch-Ereignisse wären sonst wirkungslos.
-export class PinchAccumulator {
-  #factor = 1;
-
-  add(currentScale: number, factor: number): number | null {
-    this.#factor *= factor;
-    const target = clampScale(Math.round(currentScale * this.#factor * 100) / 100);
-    if (target === currentScale) return null;
-    const applied = this.#factor;
-    this.#factor = 1;
-    return applied;
-  }
-
-  reset(): void {
-    this.#factor = 1;
-  }
-}
-
 // Wheel-Ereignis mit gedrückter Strg-/Cmd-Taste oder Trackpad-Pinch in einen Zoomwunsch übersetzen.
 export function wheelZoomIntent(event: { deltaY: number; deltaMode: number }):
   | { kind: 'factor'; factor: number }
@@ -59,4 +40,34 @@ export function wheelZoomIntent(event: { deltaY: number; deltaMode: number }):
     return { kind: 'factor', factor: Math.exp(-event.deltaY / 100) };
   }
   return { kind: 'steps', steps: event.deltaY < 0 ? 1 : -1 };
+}
+
+// Pinch-Zoom als Vorschau: Während der Geste wird nur das fertige Bild der Seiten vergrößert (CSS-Transformation,
+// zeichnet die Grafikkarte), pdf.js setzt die Seiten erst danach einmal neu. Die Verschiebung hält den Punkt unter
+// dem Zeiger fest und folgt sonst dem, was pdf.js und das Scrollen danach zeigen: Passt der Inhalt in die Ansicht,
+// steht er waagrecht in der Mitte und senkrecht oben; sonst bleibt kein leerer Rand in der Ansicht.
+// Alle Werte in Koordinaten des Scrollinhalts; ein Punkt p landet bei origin + (p - origin) * scale + shift.
+export interface PinchAxis {
+  pointer: number;
+  origin: number;
+  contentStart: number;
+  contentEnd: number;
+  viewStart: number;
+  viewSize: number;
+  centerWhenFits: boolean;
+}
+
+export function pinchShift(scale: number, axis: PinchAxis): number {
+  const { pointer, origin, contentStart, contentEnd, viewStart, viewSize } = axis;
+  let shift = (pointer - origin) * (1 - scale);
+  const start = origin + (contentStart - origin) * scale + shift;
+  const end = origin + (contentEnd - origin) * scale + shift;
+  if (end - start <= viewSize) {
+    shift += axis.centerWhenFits ? viewStart + viewSize / 2 - (start + end) / 2 : viewStart - start;
+  } else if (start > viewStart) {
+    shift += viewStart - start;
+  } else if (end < viewStart + viewSize) {
+    shift += viewStart + viewSize - end;
+  }
+  return shift;
 }
