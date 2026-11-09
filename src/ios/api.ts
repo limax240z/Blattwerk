@@ -629,12 +629,14 @@ export function createIosApi(): BlattwerkApi {
         return list;
       },
     },
-    getSettings: async (): Promise<AppSettings> => ({ authorName: await authorName() }),
+    // Vollbild gibt es auf dem iPad nicht; die Einstellung dazu zeigt die Oberfläche dort nicht an
+    getSettings: async (): Promise<AppSettings> => ({ authorName: await authorName(), readModeFullscreen: false }),
     setAuthorName: async (name) => {
       const valid = validateAuthorName(name);
       if (valid !== null) await updateSettings({ authorName: valid });
-      return { authorName: await authorName() };
+      return { authorName: await authorName(), readModeFullscreen: false };
     },
+    setReadModeFullscreen: async () => ({ authorName: await authorName(), readModeFullscreen: false }),
     // Auf dem iPad schließt man die App nicht über Blattwerk; ungespeicherte Stände bleiben bis zum Sichern im Tab
     confirmClose: () => undefined,
     cancelClose: () => undefined,

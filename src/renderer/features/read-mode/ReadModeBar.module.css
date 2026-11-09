@@ -24,3 +24,18 @@
 .hidden {
   opacity: 0;
 }
+
+/* Zugfläche oben (nur macOS, dort Titelleiste in der Werkzeugleiste) */
+.dragStrip {
+  display: none;
+}
+
+:global([data-platform='mac']) .dragStrip {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 39;
+  display: block;
+  height: 28px;
+}

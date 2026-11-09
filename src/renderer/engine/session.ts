@@ -935,6 +935,7 @@ function isEditableFocus(): boolean {
 
 export function setViewMode(tab: TabState, mode: ViewMode): void {
   useDocuments.getState().updateTab(tab.id, { viewMode: mode });
+  getRuntime(tab.id)?.flushZoom?.();
   const viewer = getRuntime(tab.id)?.viewer;
   if (!viewer) return;
   const page = viewer.currentPageNumber;
@@ -945,6 +946,7 @@ export function setViewMode(tab: TabState, mode: ViewMode): void {
 }
 
 export function setScaleValue(tab: TabState, value: string): void {
+  getRuntime(tab.id)?.flushZoom?.();
   const viewer = getRuntime(tab.id)?.viewer;
   if (!viewer) return;
   viewer.currentScaleValue = value;
@@ -1261,6 +1263,7 @@ export function executeCommand(command: CommandId): void {
   }
 
   if (!viewer) return;
+  runtime?.flushZoom?.();
   switch (command) {
     case 'view.zoomIn':
       viewer.increaseScale();

@@ -431,3 +431,37 @@ test('Zoom: Prozentwert eintippen, Enter übernimmt, Esc verwirft', async () => 
   await expect(page.getByTestId('zoom-select')).toHaveValue('page-fit');
   await close();
 });
+
+test('Pinch-Zoom: Vorschau während der Geste, danach ohne Sprung scharf gesetzt', async () => {
+  const { page, app, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, TEXT_PDF.pages);
+  await menuClick(app, 'view.fitWidth');
+  await expect(page.getByTestId('zoom-select')).toHaveValue('page-width');
+  const before = await page.locator('[data-testid="active-pane"] .page').first().boundingBox();
+  const scaleBefore = await page.getByTestId('zoom-select').inputValue();
+  // Eine Geste: viele kleine Schritte hintereinander, Zeiger fest
+  const during = await page.getByTestId('viewer-container').evaluate(async (element) => {
+    const box = element.getBoundingClientRect();
+    for (let i = 0; i < 30; i++) {
+      element.dispatchEvent(new WheelEvent('wheel', { ctrlKey: true, deltaY: -3, deltaMode: 0, clientX: box.left + 250, clientY: box.top + 200, bubbles: true, cancelable: true }));
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    const pageBox = element.querySelector('.page')?.getBoundingClientRect();
+    return { transform: (element.querySelector('.pdfViewer') as HTMLElement).style.transform, left: pageBox?.left ?? 0, top: pageBox?.top ?? 0, width: pageBox?.width ?? 0 };
+  });
+  // Während der Geste: nur vergrößertes Bild, pdf.js hat den Maßstab noch nicht übernommen
+  expect(during.transform).toContain('scale(');
+  expect(during.width).toBeGreaterThan((before?.width ?? 0) * 1.5);
+  expect(await page.getByTestId('zoom-select').inputValue()).toBe(scaleBefore);
+  // Danach übernimmt pdf.js den Maßstab; die Seite bleibt, wo die Vorschau sie gezeigt hat
+  await expect.poll(() => page.locator('[data-testid="active-pane"] .pdfViewer').evaluate((el) => (el as HTMLElement).style.transform)).toBe('');
+  await expect(page.getByTestId('zoom-select')).not.toHaveValue(scaleBefore);
+  const after = await page.getByTestId('viewer-container').evaluate((element) => {
+    const pageBox = element.querySelector('.page')?.getBoundingClientRect();
+    return { left: pageBox?.left ?? 0, top: pageBox?.top ?? 0, width: pageBox?.width ?? 0 };
+  });
+  expect(Math.abs(after.width - during.width)).toBeLessThan(during.width * 0.02);
+  expect(Math.abs(after.left - during.left)).toBeLessThan(6);
+  expect(Math.abs(after.top - during.top)).toBeLessThan(6);
+  await close();
+});

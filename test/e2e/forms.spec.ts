@@ -440,3 +440,53 @@ test('Lesemodus lässt sich aus jedem Arbeitsbereich starten', async () => {
   await close();
 });
 
+
+test('Lesemodus: Vollbild lässt sich in den Einstellungen abschalten', async () => {
+  const { page, app, userData, close } = await launchApp([fixture('text.pdf')]);
+  await waitForDocument(page, 12);
+  // Wünsche nach Vollbild zählen (verborgene Fenster schalten ohnehin nicht um)
+  await app.evaluate(({ ipcMain }) => {
+    const calls: boolean[] = [];
+    (globalThis as unknown as { __fullscreen: boolean[] }).__fullscreen = calls;
+    ipcMain.removeHandler('window:fullscreen');
+    ipcMain.handle('window:fullscreen', (_event, on: boolean) => {
+      calls.push(on);
+      return false;
+    });
+  });
+  const requests = () => app.evaluate(() => (globalThis as unknown as { __fullscreen: boolean[] }).__fullscreen.slice());
+
+  // Vorgabe: mit Vollbild
+  await page.getByTestId('read-mode-button').click();
+  await expect(page.getByTestId('read-mode-exit')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('read-mode-exit')).toHaveCount(0);
+  expect(await requests()).toEqual([true, false]);
+
+  await menuClick(app, 'app.settings');
+  const box = page.getByTestId('settings-read-fullscreen');
+  await expect(box).toBeChecked();
+  await box.uncheck();
+  await page.getByTestId('settings-save').click();
+  await expect(page.getByTestId('settings-dialog')).toHaveCount(0);
+  const stored = () => {
+    try {
+      return (JSON.parse(readFileSync(path.join(userData, 'settings.json'), 'utf8')) as { readModeFullscreen?: boolean }).readModeFullscreen;
+    } catch {
+      return undefined;
+    }
+  };
+  await expect.poll(stored).toBe(false);
+
+  // Ohne Vollbild: Leisten weg wie gewohnt, das Fenster bleibt, wie es ist
+  await page.getByTestId('read-mode-button').click();
+  await expect(page.getByTestId('read-mode-exit')).toBeVisible();
+  await expect(page.getByTestId('open-button')).toBeHidden();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('read-mode-exit')).toHaveCount(0);
+  expect(await requests()).toEqual([true, false]);
+
+  await menuClick(app, 'app.settings');
+  await expect(page.getByTestId('settings-read-fullscreen')).not.toBeChecked();
+  await close();
+});

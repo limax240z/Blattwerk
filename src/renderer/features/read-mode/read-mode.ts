@@ -1,6 +1,7 @@
 // Lesemodus: Das Dokument füllt den Bildschirm, ohne Leisten, und ändern lässt sich nichts. Erlaubt sind nur die Befehle
 // aus READ_MODE_COMMANDS (executeCommand); Kommentare sind schreibgeschützt (AnnotationLayer), Formularfelder gesperrt
-// (ReadModeBar). Beim Beenden kommen Zoom und Fensterzustand wieder wie vorher.
+// (ReadModeBar). Vollbild nur, wenn es in den Einstellungen an ist (readModeFullscreen). Beim Beenden kommen Zoom und
+// Fensterzustand wieder wie vorher.
 import { api } from '../../api';
 import { getRuntime } from '../../engine/runtime';
 import { commitPendingEdits } from '../../engine/session';
@@ -44,13 +45,16 @@ export function enterReadMode(tab: TabState): void {
   annotations.setTool('select');
   annotations.select(tab.id, null);
   window.getSelection()?.removeAllRanges();
-  const entry = { tabId: tab.id, scaleValue: String(viewer.currentScaleValue), wasFullscreen: false };
+  // Ohne Vollbild bleibt der Fensterzustand unberührt (wasFullscreen = true: beim Beenden nichts zurückschalten)
+  const entry = { tabId: tab.id, scaleValue: String(viewer.currentScaleValue), wasFullscreen: !ui.readModeFullscreen };
   saved = entry;
   ui.setReadMode(true);
   viewer.currentScaleValue = 'page-fit';
-  void api.setFullscreen(true).then((was) => {
-    entry.wasFullscreen = was;
-  });
+  if (ui.readModeFullscreen) {
+    void api.setFullscreen(true).then((was) => {
+      entry.wasFullscreen = was;
+    });
+  }
 }
 
 export function exitReadMode(): void {

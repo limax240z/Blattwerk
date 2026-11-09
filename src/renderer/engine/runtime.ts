@@ -36,6 +36,8 @@ export interface DocumentRuntime {
   // true, solange die Suche geschlossen ist. pdf.js meldet beim Schließen noch einmal den alten
   // Trefferstand; der darf den Zustand nicht überschreiben.
   findClosed: boolean;
+  // Übernimmt eine laufende Pinch-Vorschau sofort in pdf.js (ViewerHost); vor jedem anderen Zoom- oder Ansichtswechsel
+  flushZoom: (() => void) | null;
   terminate: () => void;
 }
 
@@ -80,6 +82,7 @@ export function createRuntime(tabId: string, file: FileInfo, terminate: () => vo
     container: null,
     findClosed: true,
     hiddenRefs: new Map(),
+    flushZoom: null,
     password: null,
     terminate,
   };

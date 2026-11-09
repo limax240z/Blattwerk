@@ -613,6 +613,8 @@
     "title": "Einstellungen",
     "authorName": "Name für Kommentare",
     "authorHint": "Dieser Name steht als Verfasser bei neuen Kommentaren und Antworten.",
+    "readModeFullscreen": "Lesemodus im Vollbild öffnen",
+    "readModeHint": "Aus: Der Lesemodus blendet nur die Leisten aus, das Fenster behält seine Größe.",
     "save": "Übernehmen",
     "cancel": "Abbrechen"
   },
