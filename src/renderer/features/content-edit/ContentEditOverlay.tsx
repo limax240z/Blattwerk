@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { normalizeRect, type Point, type Rect } from '../../../shared/annotations';
+import { boundsOf, normalizeRect, type Point, type Rect } from '../../../shared/annotations';
 import { editUnits, LINE_HEIGHT, missingChars, scalingAbout, translation, type EditUnit, type PageObjectInfo, type PageObjects } from '../../../shared/content';
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { trackPending } from '../../engine/session';
+import { clampMove, clampToRect, maxScale, pageRect } from '../annotations/geometry';
 import { useContentEdit, type TextEditing, type TextStyle } from '../../state/content-edit-store';
 import { useUi } from '../../state/ui-store';
 import { isMixed, runsText, sameStyle, type RunStyle, type TextRun } from '../../../shared/rich-text';
@@ -12,6 +13,9 @@ import { RichTextEditor, type RichEditorHandle } from './RichTextEditor';
 import { isSystemFontKey } from '../../../shared/fonts';
 import { previewFamily, registerPreview } from './system-fonts';
 import { addRichText, editParagraph, editText, flowMargins, lineHeight, reflowText, transformObjects } from './actions';
+import { registerListTarget } from '../lists/list-bridge';
+import { LIST_MENU_ATTRIBUTE } from '../lists/ListControls';
+import { textareaListAction, textareaListKey } from '../lists/textarea-lists';
 import styles from './ContentEditOverlay.module.css';
 import { pageObjects } from './page-objects';
 
@@ -21,13 +25,16 @@ type Gesture =
   | { kind: 'move'; object: EditUnit; group: EditUnit[]; origin: Point; dx: number; dy: number; client: { x: number; y: number } }
   // Auswahlrechteck auf freier Fläche (Ansichtskoordinaten); additive: Umschalt/Cmd ergänzt die Auswahl
   | { kind: 'marquee'; start: Point; to: Point; additive: boolean }
-  | { kind: 'scale'; object: EditUnit; fixed: Point; to: Point }
+  // limit: größter Faktor, bei dem das Objekt auf der Seite bleibt
+  | { kind: 'scale'; object: EditUnit; fixed: Point; to: Point; limit: number }
   // Breite eines Textes ändern (Anfasser links oder rechts); der Text bricht neu um
   | { kind: 'width'; object: EditUnit; side: 'left' | 'right'; to: Point };
 
 const MIN_EDITOR_PX = 11;
 // Rahmen (1 px) und Innenabstand (2 px) der Eingabe links: So beginnt der Text genau an der Klickstelle
 const EDITOR_INSET_PX = 3;
+// Abstand des Textes zur Seitenkante, wenn er dort automatisch umbricht (Punkt)
+const EDGE_GAP = 18;
 const pxToUnits = (px: number, scale: number) => px / (scale * (96 / 72));
 // Schmalste Breite eines Textes beim Ziehen: zwei Schriftgrößen
 const minTextWidth = (object: PageObjectInfo) => 2 * (object.visualSize ?? object.fontSize ?? 12);
@@ -42,7 +49,7 @@ export function isUprightView(geometry: PageGeometry): boolean {
 
 // Leiste „Inhalt bearbeiten“: Klicks dort beenden die Texteingabe nicht (Größe, Schrift, Farbe wirken auf sie)
 const inToolbar = (target: EventTarget | null) =>
-  target instanceof Element && target.closest('[data-testid="content-edit-toolbar"], [data-testid="content-size-list"], [data-color-panel]') !== null;
+  target instanceof Element && target.closest(`[data-testid="content-edit-toolbar"], [data-testid="content-size-list"], [data-color-panel], [${LIST_MENU_ATTRIBUTE}]`) !== null;
 
 // Live-Vorschau beim Verschieben und Skalieren: Abbild der Einheit aus dem gezeichneten Seitenbild, dazu die Farbe
 // des Hintergrunds um sie herum (verdeckt die alte Stelle, bis die geänderte Seite geladen ist)
@@ -137,11 +144,11 @@ function corners([l, b, r, t]: Rect): Point[] {
 }
 
 // Gleichmäßiger Faktor beim Ziehen einer Ecke (das Seitenverhältnis bleibt)
-function scaleFactor(object: PageObjectInfo, fixed: Point, to: Point): number {
+function scaleFactor(object: PageObjectInfo, fixed: Point, to: Point, limit = Infinity): number {
   const [l, b, r, t] = object.bounds;
   const width = Math.max(1, r - l);
   const height = Math.max(1, t - b);
-  return Math.max(0.05, Math.max(Math.abs(to.x - fixed.x) / width, Math.abs(to.y - fixed.y) / height));
+  return Math.min(limit, Math.max(0.05, Math.max(Math.abs(to.x - fixed.x) / width, Math.abs(to.y - fixed.y) / height)));
 }
 
 function previewBounds(object: PageObjectInfo, gesture: Gesture | null): Rect {
@@ -155,7 +162,7 @@ function previewBounds(object: PageObjectInfo, gesture: Gesture | null): Rect {
     const min = minTextWidth(object);
     return gesture.side === 'left' ? [Math.min(gesture.to.x, r - min), b, r, t] : [l, b, Math.max(gesture.to.x, l + min), t];
   }
-  const f = scaleFactor(object, gesture.fixed, gesture.to);
+  const f = scaleFactor(object, gesture.fixed, gesture.to, gesture.limit);
   const { x, y } = gesture.fixed;
   return normalizeRect([x + (l - x) * f, y + (b - y) * f, x + (r - x) * f, y + (t - y) * f]);
 }
@@ -226,8 +233,14 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
       const current = gestureRef.current;
       if (!current) return;
       if (current.kind === 'move') {
+        // Versatz aus dem (auf die Seite begrenzten) Verschieben in PDF-Punkten, umgerechnet in Bildschirmpixel
         const layer = moveLayer.current;
-        if (layer) layer.style.transform = `translate(${pointer.current.x - current.client.x}px, ${pointer.current.y - current.client.y}px)`;
+        const box = svgRef.current?.getBoundingClientRect();
+        if (layer && box && box.width > 0) {
+          const [ox, oy] = geometry.toView(current.origin);
+          const [mx, my] = geometry.toView({ x: current.origin.x + current.dx, y: current.origin.y + current.dy });
+          layer.style.transform = `translate(${((mx - ox) / geometry.width) * box.width}px, ${((my - oy) / geometry.height) * box.height}px)`;
+        }
       } else {
         setGestureState(current);
       }
@@ -346,7 +359,8 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     (event.currentTarget as Element).setPointerCapture(event.pointerId);
     const points = corners(object.bounds);
     setGhosts(snapshot(pageCanvas(), geometry, [object]));
-    setGesture({ kind: 'scale', object, fixed: points[(corner + 2) % 4] as Point, to: toPdf(event) });
+    const fixed = points[(corner + 2) % 4] as Point;
+    setGesture({ kind: 'scale', object, fixed, to: toPdf(event), limit: maxScale(object.bounds, fixed, pageRect(geometry)) });
   };
 
   const onSidePointerDown = (event: ReactPointerEvent, object: EditUnit, side: 'left' | 'right') => {
@@ -366,8 +380,12 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
       return;
     }
     const at = toPdf(event);
-    if (current.kind === 'move') scheduleGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
-    else scheduleGesture({ ...current, to: at });
+    if (current.kind === 'move') {
+      // Text und Bilder nicht über den Seitenrand hinaus verschieben
+      const bounds = boundsOf(current.group.flatMap(({ bounds: [l, b, r, t] }) => [{ x: l, y: b }, { x: r, y: t }]));
+      scheduleGesture({ ...current, ...clampMove(bounds, at.x - current.origin.x, at.y - current.origin.y, pageRect(geometry)) });
+    } else if (current.kind === 'scale') scheduleGesture({ ...current, to: at });
+    else scheduleGesture({ ...current, to: current.kind === 'width' ? clampToRect(at, pageRect(geometry)) : at });
   };
 
   const finish = () => {
@@ -402,7 +420,7 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
       void transformObjects(tabId, pageIndex, moved, translation(current.dx, current.dy));
       return;
     }
-    const factor = scaleFactor(current.object, current.fixed, current.to);
+    const factor = scaleFactor(current.object, current.fixed, current.to, current.limit);
     if (Math.abs(factor - 1) < 0.01) {
       setGhosts(null);
       return;
@@ -715,12 +733,55 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
       ? geometry.rectToView(editing.bounds)
       : { x: editing.at.x - EDITOR_INSET_PX / viewScale, y: editing.at.y - (fontSize * LINE_HEIGHT) / 2 / viewScale - 1 / viewScale, w: 0, h: 0 };
   const left = frame?.left ?? box.x;
+  // Neuer Text am unteren Seitenrand: so weit nach oben, dass alle Zeilen auf die Seite passen
+  const [lift, setLift] = useState(0);
+  const top = box.y - lift;
+  // Rechter Rand für Text: Wird er erreicht, bricht der Text dort um (wie beim Ziehen der Breite), statt über die
+  // Seite hinauszulaufen. Vorhandener Text, der schon breiter ist, bleibt, wie er ist.
+  const limit = geometry.width - EDGE_GAP;
+  const autoWrap = resizable && !flow && (editing.mode === 'new' || box.x + box.w <= limit);
+  const fit = () => {
+    const wrap = wrapRef.current;
+    const editor = wrap?.firstElementChild;
+    const container = wrap?.offsetParent;
+    if (!wrap || !editor || !container) return;
+    const pxPerUnit = container.getBoundingClientRect().width / geometry.width;
+    if (!(pxPerUnit > 0)) return;
+    const size = editor.getBoundingClientRect();
+    if (autoWrap && !frame && (editing.mode === 'new' || value !== initial)) {
+      const width = size.width / pxPerUnit;
+      if (left + width > limit + 0.5) {
+        const min = (6 * fontSize) / viewScale;
+        // Klick dicht an der Kante: Anfang so weit nach links, dass wenigstens ein paar Wörter Platz haben
+        const start = editing.mode === 'new' ? Math.max(0, Math.min(left, limit - min)) : left;
+        if (limit - start > 0) setFrame({ left: start, width: limit - start });
+      }
+    }
+    if (editing.mode === 'new' && !flow) {
+      const overflow = box.y + size.height / pxPerUnit - (geometry.height - EDGE_GAP / 2);
+      setLift(Math.max(0, Math.min(box.y, overflow)));
+    }
+  };
+  // Bei jeder Größenänderung der Eingabe (Tippen, andere Schriftgröße) prüfen; fitRef hält den neuesten Stand
+  const fitRef = useRef(fit);
+  useEffect(() => {
+    fitRef.current = fit;
+  });
+  useEffect(() => {
+    const editor = wrapRef.current?.firstElementChild;
+    if (!editor) return;
+    const observer = new ResizeObserver(() => fitRef.current());
+    observer.observe(editor);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const area = ref.current;
     if (!area) return;
     area.focus({ preventScroll: true });
     area.setSelectionRange(area.value.length, area.value.length);
+    // Aufzählung, Nummerierung und Einzug aus der Leiste (die Eingabe mit gemischter Gestaltung meldet sich selbst an)
+    return registerListTarget({ apply: (action) => textareaListAction(area, action, setPlain) });
   }, []);
 
   const font = editing.mode === 'edit' && editing.font ? listing?.fonts[editing.font] : undefined;
@@ -751,7 +812,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     const y = box.y;
     if (editing.mode === 'new') {
       // Oberkante der ersten Zeile: innerhalb des Rahmens der Eingabe; der Text beginnt dort, wo die Eingabe steht
-      const origin = geometry.toPdf(editing.at.x + (left - box.x), box.y + 1 / viewScale);
+      const origin = geometry.toPdf(editing.at.x + (left - box.x), top + 1 / viewScale);
       const width = frame ? frame.width - (2 * EDITOR_INSET_PX) / viewScale : undefined;
       // Fließtext: unterhalb des unteren Rands geht es auf einer neuen Seite oben am Rand weiter
       const flowLimits = flow ? { top: geometry.toPdf(margins.left, margins.top).y, bottom: geometry.toPdf(margins.left, geometry.height - margins.bottom).y } : undefined;
@@ -846,9 +907,10 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
     handle.setPointerCapture(event.pointerId);
     const move = (moveEvent: PointerEvent) => {
       const dx = (moveEvent.clientX - startX) / pxPerUnit;
-      if (side === 'right') setFrame({ left: startLeft, width: Math.max(min, startWidth + dx) });
+      // Nicht über die Seitenkanten hinaus ziehen
+      if (side === 'right') setFrame({ left: startLeft, width: Math.max(min, Math.min(startWidth + dx, geometry.width - startLeft)) });
       else {
-        const width = Math.max(min, startWidth - dx);
+        const width = Math.max(min, Math.min(startWidth - dx, startLeft + startWidth));
         setFrame({ left: startLeft + startWidth - width, width });
       }
     };
@@ -865,6 +927,8 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     event.stopPropagation();
+    // Text aus anderen Programmen: Tabulator rückt ein; die Eingabetaste setzt nur in Absätzen eine Liste fort
+    if (event.currentTarget instanceof HTMLTextAreaElement && textareaListKey(event as KeyboardEvent<HTMLTextAreaElement>, setPlain, paragraph)) return;
     if (event.key === 'Escape') {
       event.preventDefault();
       cancel();
@@ -878,7 +942,7 @@ function TextEditor({ editing, geometry, scale, listing }: { editing: TextEditin
   const fixedWidth = frame?.width ?? (paragraph ? box.w : null);
   const position = {
     left: `${(left / geometry.width) * 100}%`,
-    top: `${(box.y / geometry.height) * 100}%`,
+    top: `${(top / geometry.height) * 100}%`,
     // Feste Breite (Absatz oder gezogen): die Eingabe bricht um wie später der Text auf der Seite
     ...(fixedWidth !== null
       ? { width: `${(fixedWidth / geometry.width) * 100}%`, whiteSpace: 'normal' as const }

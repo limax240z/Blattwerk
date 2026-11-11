@@ -16,7 +16,7 @@ import { addAnnotation, baseFields, hideDomAnnotations, updateAnnotation } from 
 import { css } from './AnnotationShape';
 import { createInk, createMarkup, createRedaction, MARKER_OPACITY, MARKER_WIDTH, simplifyPath } from './create';
 import { useLiveText } from '../live-text/useLiveText';
-import { clipPath, isMovable, pageRect, quadsFromRects, translate } from './geometry';
+import { clampMove, clipPath, contentBounds, isMovable, pageRect, quadsFromRects, translate } from './geometry';
 import styles from './PageOverlay.module.css';
 import { PageOverlay } from './PageOverlay';
 import { followSelectionDrag, paintLiveSelection, repairTextOrder } from './selection-drag';
@@ -369,7 +369,10 @@ export function AnnotationLayer({ tabId, active }: { tabId: string; active: bool
       const distance = event.shiftKey ? 10 : 1;
       const origin = geometry.toPdf(0, 0);
       const moved = geometry.toPdf(step[0] * distance, step[1] * distance);
-      updateAnnotation(tabId, selected, translate(selected, moved.x - origin.x, moved.y - origin.y));
+      // Am Seitenrand bleibt der Kommentar stehen
+      const { dx, dy } = clampMove(contentBounds(selected), moved.x - origin.x, moved.y - origin.y, pageRect(geometry));
+      if (dx === 0 && dy === 0) return;
+      updateAnnotation(tabId, selected, translate(selected, dx, dy));
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

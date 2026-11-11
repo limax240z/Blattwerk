@@ -6,6 +6,8 @@ import { useEffect, useLayoutEffect, useRef, type CSSProperties, type KeyboardEv
 import { useTranslation } from 'react-i18next';
 import { normalizeRuns, replaceRange, restyleRange, styleAt, withStyle, type RunStyle, type StylePatch, type TextRun } from '../../../shared/rich-text';
 import { useContentEdit } from '../../state/content-edit-store';
+import { listEdit, listEnter, type ListResult } from '../../../shared/lists';
+import { registerListTarget } from '../lists/list-bridge';
 
 export interface RichEditorHandle {
   runs: () => TextRun[];
@@ -180,6 +182,24 @@ export function RichTextEditor({ initial, typing, css, className, handleRef, onC
     report();
   };
 
+  // Aufzählung, Nummerierung oder Einzug: Die Änderungen betreffen den Anfang von Zeilen; eingefügte Zeichen bekommen
+  // die Gestaltung des ersten Zeichens ihrer Zeile (leere Zeile: die an der Einfügestelle)
+  const applyList = (change: ListResult) => {
+    if (change.steps.length === 0) return;
+    remember(false);
+    pending.current = null;
+    let next = runs.current;
+    for (const step of change.steps) {
+      // Von hinten nach vorn, damit die Stellen davor gültig bleiben
+      for (const edit of [...step].reverse()) {
+        const style = styleAt(next, edit.at + edit.remove + 1) ?? caretStyle();
+        next = replaceRange(next, edit.at, edit.at + edit.remove, edit.insert, style);
+      }
+    }
+    update(next, { start: change.start, end: change.end });
+  };
+  const text = () => runs.current.map((run) => run.text).join('');
+
   const insert = (text: string, coalesce: boolean) => {
     const { start, end } = selection.current;
     const style = caretStyle();
@@ -226,8 +246,16 @@ export function RichTextEditor({ initial, typing, css, className, handleRef, onC
       },
     };
     handleRef.current = { runs: () => runs.current };
+    const unregister = registerListTarget({
+      apply: (action) => {
+        root.focus({ preventScroll: true });
+        const { start, end } = selection.current;
+        applyList(listEdit(text(), start, end, action));
+      },
+    });
     return () => {
       document.removeEventListener('selectionchange', onSelection);
+      unregister();
       bridge.active = null;
       handleRef.current = null;
       useContentEdit.getState().setCaret(null);
@@ -243,7 +271,11 @@ export function RichTextEditor({ initial, typing, css, className, handleRef, onC
       insert(event.data.replace(/\r\n?/g, '\n'), true);
     } else if (type === 'insertLineBreak' || type === 'insertParagraph') {
       event.preventDefault();
-      insert('\n', false);
+      // In einer Listenzeile geht die Liste weiter (Umschalt+Eingabe: einfacher Umbruch)
+      const { start, end } = selection.current;
+      const change = type === 'insertParagraph' ? listEnter(text(), start, end) : null;
+      if (change) applyList(change);
+      else insert('\n', false);
     } else if (type === 'insertFromPaste' || type === 'insertFromDrop') {
       event.preventDefault();
       const text = event.dataTransfer?.getData('text/plain') ?? '';
@@ -310,6 +342,14 @@ export function RichTextEditor({ initial, typing, css, className, handleRef, onC
           event.stopPropagation();
           select(0, runs.current.reduce((sum, run) => sum + run.text.length, 0));
           report();
+          return;
+        }
+        // Tabulator rückt ein, Umschalt+Tabulator aus (wie in einer Textverarbeitung)
+        if (event.key === 'Tab' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault();
+          event.stopPropagation();
+          const { start, end } = selection.current;
+          applyList(listEdit(text(), start, end, { type: 'indent', delta: event.shiftKey ? -1 : 1 }));
           return;
         }
         onKeyDown(event);

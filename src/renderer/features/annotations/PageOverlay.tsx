@@ -16,6 +16,7 @@ import {
   baseFields,
   deleteAnnotation,
   setContents,
+  setContentsAndRect,
   updateAnnotation,
 } from './controller';
 import {
@@ -33,10 +34,29 @@ import {
   SHAPE_SIZE,
   simplifyPath,
 } from './create';
-import { clampToRect, clipPath, dragRect, inkRect, isMovable, isResizable, lineRect, pageRect, quadsFromRects, rectOfQuads, resizeFrom, translate } from './geometry';
+import {
+  clampMove,
+  clampToRect,
+  clipPath,
+  contentBounds,
+  dragRect,
+  inkRect,
+  isMovable,
+  isResizable,
+  keepOnPage,
+  lineRect,
+  pageRect,
+  quadsFromRects,
+  rectOfQuads,
+  fitFreeText,
+  resizeFrom,
+  translate,
+} from './geometry';
 import { recognizeShape, SNAP_HOLD_MS, SNAP_JITTER_PX, transformShape } from './shape-snap';
 import { caretAt, rangeBetween, type Caret } from './text-caret';
 import { rangeTextRects } from './text-selection';
+import { registerListTarget } from '../lists/list-bridge';
+import { textareaListAction, textareaListKey } from '../lists/textarea-lists';
 import styles from './PageOverlay.module.css';
 
 // Laufende Mausaktion auf der Seite
@@ -48,7 +68,7 @@ type Gesture =
   | { kind: 'ink'; points: Point[]; snapped?: Point[]; shape?: Point[]; grab?: Point }
   // client: Zeigerlage beim Anfassen; während des Ziehens wird der Kommentar nur verschoben, nicht neu gezeichnet
   | { kind: 'move'; id: string; origin: Point; dx: number; dy: number; client: { x: number; y: number } }
-  | { kind: 'resize'; id: string; fixed: Point; to: Point }
+  | { kind: 'resize'; id: string; fixed: Point; to: Point; page: Rect }
   | { kind: 'endpoint'; id: string; which: 'start' | 'end'; to: Point }
   // Anfang oder Ende einer Textmarkierung ziehen: das andere Ende bleibt fest, die Markierung folgt dem Text
   | { kind: 'markup'; id: string; fixed: Caret; quads: Quad[] | null }
@@ -87,7 +107,7 @@ function preview(a: Annotation, gesture: Gesture | null): Annotation {
     case 'move':
       return translate(a, gesture.dx, gesture.dy);
     case 'resize':
-      return resizeFrom(a, gesture.fixed, gesture.to);
+      return resizeFrom(a, gesture.fixed, gesture.to, gesture.page);
     case 'endpoint': {
       if (a.kind !== 'line' && a.kind !== 'arrow') return a;
       const start = gesture.which === 'start' ? gesture.to : a.start;
@@ -201,8 +221,11 @@ export function PageOverlay({
       const svg = svgRef.current;
       const box = svg?.getBoundingClientRect();
       if (!svg || !box || box.width === 0) return;
-      const vx = ((pointer.current.x - current.client.x) / box.width) * geometry.width;
-      const vy = ((pointer.current.y - current.client.y) / box.height) * geometry.height;
+      // Verschiebung aus dem (auf die Seite begrenzten) Versatz in PDF-Punkten, umgerechnet in die Ansicht
+      const [ox, oy] = geometry.toView(current.origin);
+      const [mx, my] = geometry.toView({ x: current.origin.x + current.dx, y: current.origin.y + current.dy });
+      const vx = mx - ox;
+      const vy = my - oy;
       for (const group of svg.querySelectorAll(`[data-move-id="${CSS.escape(current.id)}"]`)) group.setAttribute('transform', `translate(${vx} ${vy})`);
     });
   };
@@ -261,7 +284,7 @@ export function PageOverlay({
     const base = baseFields(pageIndex);
     switch (tool) {
       case 'note': {
-        const note = createNote(base, at, colors.note);
+        const note = keepOnPage(createNote(base, at, colors.note), pageRect(geometry));
         addAnnotation(tabId, note);
         store().setTool('select');
         // Text der Notiz direkt in der Kommentarliste eingeben
@@ -270,12 +293,12 @@ export function PageOverlay({
         return;
       }
       case 'stamp':
-        addAnnotation(tabId, stamp === 'custom' ? customStampAt(base, at) : createStamp(base, at, stamp, t(`stamps.${stamp}`), colors.stamp));
+        addAnnotation(tabId, keepOnPage(stamp === 'custom' ? customStampAt(base, at) : createStamp(base, at, stamp, t(`stamps.${stamp}`), colors.stamp), pageRect(geometry)));
         store().setTool('select');
         return;
       case 'signature': {
         const signature = store().pendingSignature;
-        if (signature) addAnnotation(tabId, createSignature(base, at, signature.image, signature.width, signature.height));
+        if (signature) addAnnotation(tabId, keepOnPage(createSignature(base, at, signature.image, signature.width, signature.height), pageRect(geometry)));
         store().setPendingSignature(null);
         return;
       }
@@ -325,7 +348,7 @@ export function PageOverlay({
     const points = corners(a.rect);
     const fixed = points[(corner + 2) % 4] as Point;
     capture(event);
-    setGesture({ kind: 'resize', id: a.id, fixed, to: toPdf(event) });
+    setGesture({ kind: 'resize', id: a.id, fixed, to: toPdf(event), page: pageRect(geometry) });
   };
 
   const onEndpointPointerDown = (event: ReactPointerEvent, a: Annotation, which: 'start' | 'end') => {
@@ -427,12 +450,18 @@ export function PageOverlay({
       case 'rect':
         scheduleGesture({ ...current, to: clampToRect(at, pageRect(geometry)) });
         return;
-      case 'move':
-        scheduleGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
+      case 'move': {
+        // Nicht über den Seitenrand hinaus verschieben
+        const item = items.find((a) => a.id === current.id);
+        const raw = { dx: at.x - current.origin.x, dy: at.y - current.origin.y };
+        scheduleGesture({ ...current, ...(item ? clampMove(contentBounds(item), raw.dx, raw.dy, pageRect(geometry)) : raw) });
         return;
+      }
       case 'resize':
-      case 'endpoint':
         scheduleGesture({ ...current, to: at });
+        return;
+      case 'endpoint':
+        scheduleGesture({ ...current, to: clampToRect(at, pageRect(geometry)) });
         return;
       case 'markup':
         // Läuft über die Fenster-Ereignisse (onMarkupHandleDown)
@@ -474,7 +503,7 @@ export function PageOverlay({
         applyErase(tabId, current.changes);
         return;
       case 'line':
-        addAnnotation(tabId, createLine(baseFields(pageIndex), current.tool, current.from, current.to, colors[current.tool], width));
+        addAnnotation(tabId, keepOnPage(createLine(baseFields(pageIndex), current.tool, current.from, current.to, colors[current.tool], width), pageRect(geometry)));
         store().setTool('select');
         return;
       case 'rect': {
@@ -487,12 +516,12 @@ export function PageOverlay({
         }
         if (current.tool === 'freetext') {
           const rect = dragRect(current.from, current.to, FREETEXT_SIZE);
-          const box = createFreeText(baseFields(pageIndex), rect, colors.freetext, fontSize);
+          const box = keepOnPage(createFreeText(baseFields(pageIndex), rect, colors.freetext, fontSize), pageRect(geometry));
           addAnnotation(tabId, box);
           store().setEditing(tabId, box.id);
         } else {
           const rect = dragRect(current.from, current.to, SHAPE_SIZE);
-          addAnnotation(tabId, createShape(baseFields(pageIndex), current.tool, rect, colors[current.tool], width, store().fill));
+          addAnnotation(tabId, keepOnPage(createShape(baseFields(pageIndex), current.tool, rect, colors[current.tool], width, store().fill), pageRect(geometry)));
         }
         store().setTool('select');
         return;
@@ -774,6 +803,27 @@ function FreeTextEditor({ tabId, annotation: a, geometry }: { tabId: string; ann
   const [value, setValue] = useState(a.contents);
   const r = geometry.rectToView(a.rect);
   const done = useRef(false);
+  // Langer Text: Das Feld wächst nach unten mit (am unteren Seitenrand nach oben), statt über die Seite hinauszulaufen
+  const [frame, setFrame] = useState({ y: r.y, h: r.h });
+  // Neuer Text (getippt oder durch eine Liste geändert); er steht schon im Feld: gleich messen
+  const change = (text: string) => {
+    setValue(text);
+    if (ref.current) setFrame(fitFreeText(r, contentHeight(ref.current), geometry.height));
+  };
+  const changeRef = useRef(change);
+  useEffect(() => {
+    changeRef.current = change;
+  });
+  // Aufzählung, Nummerierung und Einzug aus der Leiste
+  useEffect(
+    () =>
+      registerListTarget({
+        apply: (action) => {
+          if (ref.current) textareaListAction(ref.current, action, (text) => changeRef.current(text));
+        },
+      }),
+    [],
+  );
 
   useEffect(() => {
     const area = ref.current;
@@ -792,7 +842,14 @@ function FreeTextEditor({ tabId, annotation: a, geometry }: { tabId: string; ann
       if (last?.type === 'add' && last.annotation.id === a.id) store.discard(tabId, a.id);
       else deleteAnnotation(tabId, a.id);
     } else {
-      setContents(tabId, a.id, value);
+      const area = ref.current;
+      const fitted = area ? fitFreeText(r, contentHeight(area), geometry.height) : frame;
+      if (Math.abs(fitted.y - r.y) < 0.01 && Math.abs(fitted.h - r.h) < 0.01) setContents(tabId, a.id, value);
+      else {
+        const p = geometry.toPdf(r.x, fitted.y);
+        const q = geometry.toPdf(r.x + r.w, fitted.y + fitted.h);
+        setContentsAndRect(tabId, a.id, value, normalizeRect([p.x, p.y, q.x, q.y]));
+      }
     }
     store.setEditing(tabId, null);
   };
@@ -806,6 +863,7 @@ function FreeTextEditor({ tabId, annotation: a, geometry }: { tabId: string; ann
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     event.stopPropagation();
+    if (textareaListKey(event, change, true)) return;
     if (event.key === 'Escape' || (event.key === 'Enter' && (event.metaKey || event.ctrlKey))) {
       event.preventDefault();
       commit();
@@ -813,7 +871,7 @@ function FreeTextEditor({ tabId, annotation: a, geometry }: { tabId: string; ann
   };
 
   return (
-    <foreignObject x={r.x} y={r.y} width={r.w} height={r.h}>
+    <foreignObject x={r.x} y={frame.y} width={r.w} height={frame.h}>
       <textarea
         ref={ref}
         className={styles.freeTextEditor}
@@ -821,13 +879,22 @@ function FreeTextEditor({ tabId, annotation: a, geometry }: { tabId: string; ann
         value={value}
         aria-label={t('comments.freeTextInput')}
         data-testid="freetext-editor"
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => change(event.target.value)}
         onBlur={commit}
         onKeyDown={onKeyDown}
         onPointerDown={(event) => event.stopPropagation()}
       />
     </foreignObject>
   );
+}
+
+// Höhe des Textes in einem Eingabefeld (Einheiten der Ansicht: im foreignObject entspricht 1 CSS-Pixel 1 Punkt)
+function contentHeight(area: HTMLTextAreaElement): number {
+  const before = area.style.height;
+  area.style.height = '0px';
+  const height = area.scrollHeight;
+  area.style.height = before;
+  return height;
 }
 
 // Anfasser an Anfang und Ende einer Textmarkierung (wie bei einer Textauswahl): Ziehen kürzt oder verlängert sie

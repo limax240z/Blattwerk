@@ -518,6 +518,71 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     await close();
   });
 
+  test('neuer Text am rechten Rand bricht dort um, statt über die Seite hinauszulaufen', async () => {
+    const { page, close } = await openActualSize();
+    await page.getByTestId('content-tool-text').click();
+    const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+    if (!overlay) throw new Error('keine Ebene');
+    await page.mouse.click(overlay.x + overlay.width * 0.6, overlay.y + 420);
+    const editor = page.getByTestId('content-text-editor');
+    await page.keyboard.type('Dieser Satz ist so lang, dass er auf keinen Fall in eine einzige Zeile bis zum rechten Rand der Seite passt.');
+    // Schon in der Eingabe umbrochen
+    const typing = await editor.boundingBox();
+    expect((typing?.x ?? 0) + (typing?.width ?? 0)).toBeLessThanOrEqual(overlay.x + overlay.width + 1);
+    await page.keyboard.press('Meta+Enter');
+    await expect(editor).toHaveCount(0);
+    const placed = textObject(page, 'Dieser Satz');
+    await expect(placed).toBeVisible();
+    const box = await placed.boundingBox();
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(overlay.x + overlay.width);
+    expect(box?.height ?? 0).toBeGreaterThan(40);
+    await close();
+  });
+
+  test('neuer und vorhandener Text: Nummerierung, Aufzählung und Einzug', async () => {
+    const { page, close } = await openActualSize();
+    await expect(page.getByTestId('list-controls')).toHaveCount(0);
+    await page.getByTestId('content-tool-text').click();
+    const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
+    if (!overlay) throw new Error('keine Ebene');
+    await page.mouse.click(overlay.x + 100, overlay.y + 420);
+    const editor = page.getByTestId('content-text-editor');
+    await page.getByTestId('list-numbers').click();
+    await expect(editor).toBeFocused();
+    await page.keyboard.type('Erstens');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('Unterpunkt');
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('Shift+Tab');
+    await page.keyboard.type('Zweitens');
+    await expect(editor).toHaveText('1. Erstens\n    1. Unterpunkt\n2. Zweitens');
+    await page.keyboard.press('Meta+Enter');
+    await expect(editor).toHaveCount(0);
+    const placed = textObject(page, '1. Erstens');
+    await expect(placed).toHaveAttribute('data-text', '1. Erstens\n    1. Unterpunkt\n2. Zweitens');
+
+    // Wieder bearbeiten: als Aufzählung mit Strichen
+    await placed.dblclick();
+    await expect(editor).toBeFocused();
+    await page.keyboard.press('ControlOrMeta+A');
+    await page.getByTestId('list-bullets-menu').click();
+    await page.locator('[data-list-kind="dash"]').click();
+    await expect(editor).toHaveText('– Erstens\n    – Unterpunkt\n– Zweitens');
+    await page.keyboard.press('Meta+Enter');
+    await expect(textObject(page, '– Erstens')).toHaveAttribute('data-text', '– Erstens\n    – Unterpunkt\n– Zweitens');
+
+    // Text aus dem PDF: Zeile bekommt einen Punkt davor
+    const line = textObject(page, 'Ein PDF besteht aus Objekten');
+    await line.dblclick();
+    await expect(editor).toBeFocused();
+    await page.getByTestId('list-bullets').click();
+    await expect(editor).toHaveValue(/^• Ein PDF besteht aus Objekten/);
+    await page.keyboard.press('Enter');
+    await expect(textObject(page, '• Ein PDF besteht')).toBeVisible();
+    await close();
+  });
+
   test('Fließtext: neue Größe ohne Auswahl gilt nur für das danach Geschriebene, wie in Word', async () => {
     const { page, close } = await openActualSize();
     await page.getByTestId('content-tool-flow').click();
