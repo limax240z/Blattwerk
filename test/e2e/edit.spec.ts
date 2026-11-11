@@ -500,7 +500,16 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
     await expect(editor).toHaveCount(1);
     await expect(editor.locator('span')).toHaveCount(1);
     await expect(editor.locator('span')).toHaveCSS('font-size', '24px');
-    const handle = await page.getByTestId('content-editor-width-right').boundingBox();
+    // Der größere Text reicht über den Rand: Die Eingabe bricht gleich danach dort um, der Anfasser springt an die
+    // Seitenkante. Erst greifen, wenn er ruhig steht.
+    const rightHandle = page.getByTestId('content-editor-width-right');
+    let handle = await rightHandle.boundingBox();
+    for (let i = 0; i < 30; i++) {
+      await page.waitForTimeout(100);
+      const next = await rightHandle.boundingBox();
+      if (JSON.stringify(next) === JSON.stringify(handle)) break;
+      handle = next;
+    }
     if (!handle) throw new Error('kein Anfasser');
     await page.mouse.move(handle.x + 3, handle.y + 9);
     await page.mouse.down();
