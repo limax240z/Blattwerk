@@ -7,6 +7,8 @@ import {
   imageMatrix,
   LINE_HEIGHT,
   MAX_PAGE_OBJECTS,
+  MAX_PAGE_PATHS,
+  BACKGROUND_SHARE,
   missingChars,
   type ContentOperation,
   type ParagraphStyle,
@@ -60,6 +62,14 @@ function objectText(m: Pdfium, object: number, textPage: number): string {
   });
 }
 
+// Pfad mit Füllung oder Kontur (reine Beschneidungspfade zeichnen nichts)
+function visiblePath(m: Pdfium, object: number): boolean {
+  return withBuffer(m, 8, (ptr) => {
+    if (!m.FPDFPath_GetDrawMode(object, ptr, ptr + 4)) return false;
+    return (m.pdfium.getValue(ptr, 'i32') as number) !== 0 || (m.pdfium.getValue(ptr + 4, 'i32') as number) !== 0;
+  });
+}
+
 function fontName(m: Pdfium, font: number): string {
   const length = m.FPDFFont_GetBaseFontName(font, 0, 0);
   if (length <= 1) return '';
@@ -96,11 +106,19 @@ export function listPageObjects(m: Pdfium, doc: number, pageIndex: number): Page
       const fonts: Record<string, PageFontInfo & { seen: Set<string>; handle: number }> = {};
       const count = m.FPDFPage_CountObjects(page);
       let truncated = false;
+      let paths = 0;
+      const pageArea = m.FPDF_GetPageWidthF(page) * m.FPDF_GetPageHeightF(page);
       for (let index = 0; index < count; index++) {
         const object = m.FPDFPage_GetObject(page, index);
         const type = m.FPDFPageObj_GetType(object);
-        const kind = type === OBJECT.text ? 'text' : type === OBJECT.image ? 'image' : type === OBJECT.form ? 'form' : null;
+        const kind = type === OBJECT.text ? 'text' : type === OBJECT.image ? 'image' : type === OBJECT.form ? 'form' : type === OBJECT.path ? 'path' : null;
         if (!kind) continue;
+        // Linien und Flächen (Tabellen, Rahmen, Unterstreichungen): nur sichtbare, keine seitenfüllenden Hintergründe, und
+        // höchstens MAX_PAGE_PATHS, damit Text auf Seiten mit vielen Vektorgrafiken auswählbar bleibt
+        if (kind === 'path' && (!visiblePath(m, object) || paths >= MAX_PAGE_PATHS)) {
+          if (paths >= MAX_PAGE_PATHS) truncated = true;
+          continue;
+        }
         // Unsichtbarer Text (z. B. aus der Texterkennung) ist nicht zum Bearbeiten gedacht
         if (kind === 'text' && m.FPDFTextObj_GetTextRenderMode(object) === TEXT_INVISIBLE) continue;
         if (objects.length >= MAX_PAGE_OBJECTS) {
@@ -109,9 +127,17 @@ export function listPageObjects(m: Pdfium, doc: number, pageIndex: number): Page
         }
         const bounds = readFloats(m, 4, (ptr) => Boolean(m.FPDFPageObj_GetBounds(object, ptr, ptr + 4, ptr + 8, ptr + 12)));
         if (!bounds) continue;
+        if (kind === 'path') {
+          const [left = 0, bottom = 0, right = 0, top = 0] = bounds;
+          if ((right - left) * (top - bottom) > pageArea * BACKGROUND_SHARE) continue;
+          paths++;
+        }
         const info: PageObjectInfo = { index, kind, bounds: bounds as PageObjectInfo['bounds'] };
         if (kind === 'text') {
-          const text = textPage ? objectText(m, object, textPage) : '';
+          let text = textPage ? objectText(m, object, textPage) : '';
+          // Ein Objekt nur aus einem Leerzeichen (Browser setzen jedes Zeichen einzeln) liest PDFium als leeren Text und
+          // ohne Fläche: als Leerzeichen behandeln, damit es zu seiner Zeile gehört
+          if (text === '' && bounds[0] === bounds[2]) text = ' ';
           const size = readFloats(m, 1, (ptr) => Boolean(m.FPDFTextObj_GetFontSize(object, ptr)));
           const font = m.FPDFTextObj_GetFont(object);
           let key = fontsByPointer.get(font);

@@ -21,6 +21,8 @@ export interface SettingsData {
   lastUpdateCheck?: number;
   // false = Lesemodus ohne Vollbild; fehlt = mit Vollbild
   readModeFullscreen?: boolean;
+  // false = nach dem Löschen nichts nachrücken; fehlt = nachrücken
+  closeGaps?: boolean;
 }
 
 function isRect(value: unknown): value is Rectangle {
@@ -39,6 +41,7 @@ function validateSettings(raw: unknown): SettingsData | null {
     updateFolder?: unknown;
     lastUpdateCheck?: unknown;
     readModeFullscreen?: unknown;
+    closeGaps?: unknown;
   };
   if (data.version !== 1 || typeof data.window !== 'object' || data.window === null) return null;
   const author = typeof data.authorName === 'string' ? data.authorName.trim().slice(0, 200) : '';
@@ -53,6 +56,7 @@ function validateSettings(raw: unknown): SettingsData | null {
     updateFolder: typeof data.updateFolder === 'string' && path.isAbsolute(data.updateFolder) && data.updateFolder.length < 4096 ? data.updateFolder : null,
     ...(typeof data.lastUpdateCheck === 'number' && Number.isFinite(data.lastUpdateCheck) ? { lastUpdateCheck: data.lastUpdateCheck } : {}),
     ...(typeof data.readModeFullscreen === 'boolean' ? { readModeFullscreen: data.readModeFullscreen } : {}),
+    ...(typeof data.closeGaps === 'boolean' ? { closeGaps: data.closeGaps } : {}),
   };
 }
 

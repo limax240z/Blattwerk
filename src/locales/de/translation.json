@@ -615,6 +615,8 @@
     "authorHint": "Dieser Name steht als Verfasser bei neuen Kommentaren und Antworten.",
     "readModeFullscreen": "Lesemodus im Vollbild öffnen",
     "readModeHint": "Aus: Der Lesemodus blendet nur die Leisten aus, das Fenster behält seine Größe.",
+    "closeGaps": "Nach dem Löschen nachrücken",
+    "closeGapsHint": "Beim Bearbeiten des Inhalts rückt Text, der unter gelöschtem Text steht, automatisch nach oben.",
     "save": "Übernehmen",
     "cancel": "Abbrechen"
   },
@@ -964,7 +966,8 @@
     "kinds": {
       "text": "Text",
       "image": "Bild",
-      "form": "Grafikgruppe"
+      "form": "Grafikgruppe",
+      "path": "Linie oder Fläche"
     },
     "font": "Schrift für neuen Text",
     "size": "Schriftgröße (eintippen oder wählen)",

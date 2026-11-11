@@ -1,7 +1,8 @@
 // Modus „Inhalt bearbeiten“ (Phase 5): ein- und ausschalten, Text und Bilder einfügen, Objekte ändern.
 // Jede Änderung ist eine Inhaltsoperation und damit ein neuer Dokumentstand (Rückgängig wie bei Seiten).
 import type { Point, Rect } from '../../../shared/annotations';
-import { LINE_HEIGHT, type ContentOperation, type EditUnit, type Matrix, type ParagraphStyle } from '../../../shared/content';
+import { closeGaps, type GapShift } from '../../../shared/close-gaps';
+import { editUnits, LINE_HEIGHT, translation, type ContentOperation, type EditUnit, type Matrix, type ParagraphStyle } from '../../../shared/content';
 import { isMixed, normalizeRuns, restyleRange, runsText, type StylePatch, type TextRun } from '../../../shared/rich-text';
 import { focusViewer, getRuntime } from '../../engine/runtime';
 import { applyContentOperations, commitPendingEdits } from '../../engine/session';
@@ -11,6 +12,7 @@ import { useContentEdit } from '../../state/content-edit-store';
 import { useDocuments, type TabState } from '../../state/documents-store';
 import { useUi } from '../../state/ui-store';
 import { toggleFormEditing } from '../form-edit/actions';
+import { pageObjects } from './page-objects';
 import { withFontData } from './system-fonts';
 import { imageSource, pickSources } from '../pages/actions';
 
@@ -162,8 +164,33 @@ export function deleteSelectedObject(tab: TabState): boolean {
   if (!tab.contentEditing || !selected) return false;
   store.select(tab.id, null);
   const indices = selected.group ? selected.group.flatMap((unit) => unit.members) : selected.members;
-  void run(tab.id, { type: 'delete', pageIndex: selected.pageIndex, indices });
+  void (async () => {
+    const shifts = useUi.getState().closeGaps ? await gapShifts(tab.id, selected.pageIndex, indices) : [];
+    // Erst verschieben, dann löschen: Löschen ändert die Positionen der Objekte in der Liste der Seite
+    await run(tab.id, [
+      ...shifts.flatMap((shift) => shift.members.map((index) => ({ type: 'transform' as const, pageIndex: selected.pageIndex, index, matrix: translation(shift.delta.x, shift.delta.y) }))),
+      { type: 'delete', pageIndex: selected.pageIndex, indices },
+    ]);
+  })();
   return true;
+}
+
+// Nachrücken (Einstellung, ADR 0033): Einheiten unter dem Gelöschten und ihre Verschiebung
+async function gapShifts(tabId: string, pageIndex: number, indices: number[]): Promise<GapShift[]> {
+  const runtime = getRuntime(tabId);
+  const pdf = runtime?.pdf;
+  if (!pdf) return [];
+  const [listing, page] = await Promise.all([pageObjects(pdf, runtime.password ?? null, pageIndex), pdf.getPage(pageIndex + 1)]);
+  if (!listing) return [];
+  const gone = new Set(indices);
+  const units = editUnits(listing.objects, listing.fonts);
+  const removed = units.filter((unit) => unit.members.some((member) => gone.has(member)));
+  const remaining = units.filter((unit) => !unit.members.some((member) => gone.has(member)));
+  return closeGaps(
+    removed.map((unit) => unit.bounds),
+    remaining.map((unit) => ({ members: unit.members, bounds: unit.bounds })),
+    page.rotate,
+  );
 }
 
 // Bild wählen und mittig auf die aktuelle Seite legen (höchstens halbe Seitenbreite, Seitenverhältnis bleibt)

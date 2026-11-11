@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { decodePDFRawStream, PDFDocument, PDFRawStream, StandardFonts } from '@cantoo/pdf-lib';
+import { decodePDFRawStream, PDFDocument, PDFRawStream, rgb, StandardFonts } from '@cantoo/pdf-lib';
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { Rect } from '../../src/shared/annotations';
 import { fixture, imageFixture, TEXT_PDF } from '../fixtures/expectations';
@@ -906,4 +906,77 @@ test('Auswahlrahmen beginnt neben der Seite und wählt die berührten Objekte', 
   await page.mouse.click(start.x, start.y);
   await expect(heading).not.toHaveAttribute('data-selected', 'true');
   await close();
+});
+
+test.describe('Löschen im Modus „Inhalt bearbeiten“', () => {
+  // Wie aus dem Browser gedruckt: jedes Zeichen ein eigenes Textobjekt, Leerzeichen eingeschlossen; dazu eine Tabelle
+  async function browserLikePdf(file: string): Promise<void> {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([400, 500]);
+    const chars = (text: string, y: number) => {
+      let x = 40;
+      for (const char of text) {
+        page.drawText(char, { x, y, size: 12, font });
+        x += font.widthOfTextAtSize(char, 12);
+      }
+    };
+    chars('Erste Zeile, mit Komma', 440);
+    chars('Zweite Zeile, auch so', 422);
+    page.drawRectangle({ x: 40, y: 380, width: 200, height: 18, color: rgb(0.85, 0.85, 0.85) });
+    page.drawLine({ start: { x: 40, y: 360 }, end: { x: 240, y: 360 }, thickness: 0.5 });
+    page.drawText('Bleibt stehen', { x: 40, y: 330, size: 12, font });
+    writeFileSync(file, await doc.save());
+  }
+
+  test('Auswahlrechteck löscht Text samt Kommas, Leerzeichen und Tabellenlinien; Darunterstehendes rückt nach', async () => {
+    const dir = tempDir();
+    const file = path.join(dir, 'browser.pdf');
+    await browserLikePdf(file);
+    const { page, app, close } = await launchApp([file], { userData: dir });
+    await waitForDocument(page, 1);
+    await page.getByTestId('content-edit-button').click();
+    await menuClick(app, 'view.fitPage');
+    const overlay = '[data-testid="content-edit-overlay-0"]';
+    const objects = page.locator(`${overlay} [data-testid="content-object"]`);
+    const below = page.locator(`${overlay} [data-testid="content-object"][data-text="Bleibt stehen"]`);
+    // Kommas und Leerzeichen gehören zur Zeile (beide Zeilen bilden einen Absatz); Linien und Flächen sind eigene Objekte
+    await expect(page.locator(`${overlay} [data-testid="content-object"][data-text="Erste Zeile, mit Komma Zweite Zeile, auch so"]`)).toHaveCount(1);
+    await expect(page.locator(`${overlay} [data-testid="content-object"][data-kind="path"]`)).toHaveCount(2);
+    await expect(objects).toHaveCount(4);
+
+    const first = await page.locator(`${overlay} [data-testid="content-object"][data-text^="Erste"]`).boundingBox();
+    const line = await page.locator(`${overlay} [data-testid="content-object"][data-kind="path"]`).last().boundingBox();
+    const before = await below.boundingBox();
+    if (!first || !line || !before) throw new Error('Objekte fehlen');
+    // Rahmen um beide Zeilen und die Tabelle (umschließt die Linien ganz)
+    await page.mouse.move(first.x - 6, first.y - 6);
+    await page.mouse.down();
+    await page.mouse.move(line.x + line.width + 6, line.y + line.height + 4, { steps: 6 });
+    await page.mouse.up();
+    await expect(page.locator(`${overlay} [data-testid="content-object"][data-selected]`)).toHaveCount(3);
+    await page.keyboard.press('Backspace');
+    await waitForDocument(page, 1);
+    // Nichts bleibt zurück, die Zeile darunter steht jetzt oben, wo die erste Zeile begann
+    await expect(objects).toHaveCount(1);
+    await expect.poll(async () => Math.round(((await below.boundingBox())?.y ?? 0) - first.y)).toBeLessThan(4);
+    expect((await below.boundingBox())?.y ?? 0).toBeLessThan(before.y - 50);
+
+    // Ohne Nachrücken (Einstellung aus) bleibt sie an ihrem Platz
+    await menuClick(app, 'edit.undo');
+    await waitForDocument(page, 1);
+    await expect(objects).toHaveCount(4);
+    await menuClick(app, 'app.settings');
+    await page.getByTestId('settings-close-gaps').uncheck();
+    await page.getByTestId('settings-save').click();
+    await page.mouse.move(first.x - 6, first.y - 6);
+    await page.mouse.down();
+    await page.mouse.move(line.x + line.width + 6, line.y + line.height + 4, { steps: 6 });
+    await page.mouse.up();
+    await page.keyboard.press('Backspace');
+    await waitForDocument(page, 1);
+    await expect(objects).toHaveCount(1);
+    expect(Math.abs(((await below.boundingBox())?.y ?? 0) - before.y)).toBeLessThan(2);
+    await close();
+  });
 });
