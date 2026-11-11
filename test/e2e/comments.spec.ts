@@ -307,14 +307,20 @@ test.describe('Kommentieren', () => {
 
   test('Kommentare bleiben auf der Seite: Textfeld am Rand wächst mit, Verschieben und Größe enden an der Kante', async () => {
     const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
-    const { page } = handle;
-    // Mit dem Textwerkzeug kommen Knöpfe in die Leiste; in schmalen Fenstern bricht sie um und die Seite rückt
-    await page.getByTestId('tool-freetext').click();
-    const at = await stablePageSpace(page);
-    const page0 = await page.getByTestId('annotation-overlay-0').boundingBox();
-    if (!page0) throw new Error('Seite ohne Größe');
-    const inside = (box: { x: number; y: number; width: number; height: number } | null) => {
+    const { page, app } = handle;
+    // Schmales Fenster wie unter Windows: Je nach Werkzeug bricht die Leiste um und die Seite rückt. Deshalb vor jedem
+    // Schritt warten, bis die Seite ruht, und gegen ihre aktuelle Lage prüfen.
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 900));
+    await menuClick(app, 'view.fitPage');
+    const pageBox = async () => {
+      await stablePageSpace(page);
+      const box = await page.getByTestId('annotation-overlay-0').boundingBox();
+      if (!box) throw new Error('Seite ohne Größe');
+      return box;
+    };
+    const inside = async (box: { x: number; y: number; width: number; height: number } | null) => {
       if (!box) throw new Error('ohne Größe');
+      const page0 = await pageBox();
       // Klickflächen von Rahmen sind etwas breiter als der Strich (halbe Breite ragt hinaus)
       expect(box.x).toBeGreaterThanOrEqual(page0.x - 6);
       expect(box.y).toBeGreaterThanOrEqual(page0.y - 6);
@@ -322,42 +328,50 @@ test.describe('Kommentieren', () => {
       expect(box.y + box.height).toBeLessThanOrEqual(page0.y + page0.height + 6);
     };
     // Klick ohne Ziehen dicht an der rechten unteren Ecke: Textfeld in Standardgröße ganz auf der Seite
+    await page.getByTestId('tool-freetext').click();
+    let at = await stablePageSpace(page);
     await page.mouse.click(at(585, 830).x, at(585, 830).y);
     const editor = page.getByTestId('freetext-editor');
     await expect(editor).toBeFocused();
     const empty = await editor.boundingBox();
-    inside(empty);
+    await inside(empty);
     // Viel Text: das Feld wächst (am unteren Rand nach oben), statt über die Seite hinauszulaufen
     await page.keyboard.type('Ein langer Text, der deutlich mehr Platz braucht als das kleine Feld in seiner Standardgröße bietet. '.repeat(3));
     await expect.poll(async () => (await editor.boundingBox())?.height ?? 0).toBeGreaterThan((empty?.height ?? 0) * 2);
-    inside(await editor.boundingBox());
+    await inside(await editor.boundingBox());
     await page.keyboard.press('Escape');
     await expect(cards(page)).toHaveCount(1);
     const box = page.locator('[data-annotation-hit]').first();
+    await pageBox();
     expect((await box.boundingBox())?.height ?? 0).toBeGreaterThan((empty?.height ?? 0) * 2);
-    inside(await box.boundingBox());
+    await inside(await box.boundingBox());
 
     // Rechteck weit über den Rand hinaus verschieben: es bleibt an der Kante stehen
     await page.getByTestId('tool-square').click();
+    at = await stablePageSpace(page);
     await drag(page, at(80, 300), at(200, 380));
+    await expect(cards(page)).toHaveCount(2);
     const square = page.locator('[data-annotation-hit]').nth(1);
+    let page0 = await pageBox();
     const before = await square.boundingBox();
     if (!before) throw new Error('Kein Rechteck');
     await drag(page, { x: before.x + 2, y: before.y + before.height / 2 }, { x: page0.x - 300, y: page0.y - 300 });
-    await expect.poll(async () => Math.round((await square.boundingBox())?.x ?? 0)).toBeLessThanOrEqual(Math.round(page0.x + 6));
-    inside(await square.boundingBox());
+    await expect.poll(async () => Math.round((await square.boundingBox())?.x ?? 0) - Math.round((await pageBox()).x)).toBeLessThanOrEqual(6);
+    await inside(await square.boundingBox());
     // Größe über den Griff unten rechts weit hinaus ziehen: endet an der Seitenkante
+    page0 = await pageBox();
     const grip = await page.locator('[data-handle="corner-1"]').boundingBox();
     if (!grip) throw new Error('Kein Griff');
     await drag(page, { x: grip.x + grip.width / 2, y: grip.y + grip.height / 2 }, { x: page0.x + page0.width + 200, y: page0.y + page0.height + 200 });
-    await expect.poll(async () => (await square.boundingBox())?.width ?? 0).toBeGreaterThan(page0.width * 0.9);
-    inside(await square.boundingBox());
+    await expect.poll(async () => ((await square.boundingBox())?.width ?? 0) / (await pageBox()).width).toBeGreaterThan(0.9);
+    await inside(await square.boundingBox());
 
     // Stempel dicht am Rand: ganz auf der Seite
     await page.getByTestId('tool-stamp').click();
+    at = await stablePageSpace(page);
     await page.mouse.click(at(590, 10).x, at(590, 10).y);
     await expect(cards(page)).toHaveCount(3);
-    inside(await page.locator('[data-annotation-hit]').nth(2).boundingBox());
+    await inside(await page.locator('[data-annotation-hit]').nth(2).boundingBox());
     await handle.close();
   });
 
