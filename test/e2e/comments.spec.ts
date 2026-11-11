@@ -39,6 +39,20 @@ async function pageSpace(page: Page, pageIndex = 0) {
   return (x: number, y: number) => ({ x: box.x + (x / 595.28) * box.width, y: box.y + (y / 841.89) * box.height });
 }
 
+// Wie pageSpace, aber erst, wenn die Seite ruhig steht (nach einer Werkzeugwahl kann die Leiste umbrechen und die
+// Seite neu eingepasst werden)
+async function stablePageSpace(page: Page) {
+  const overlay = page.getByTestId('annotation-overlay-0');
+  let last = '';
+  for (let i = 0; i < 50; i++) {
+    const key = JSON.stringify(await overlay.boundingBox());
+    if (key === last) return pageSpace(page);
+    last = key;
+    await page.waitForTimeout(150);
+  }
+  throw new Error('Seite kommt nicht zur Ruhe');
+}
+
 async function drag(page: Page, from: { x: number; y: number }, to: { x: number; y: number }) {
   await page.mouse.move(from.x, from.y);
   await page.mouse.down();
@@ -294,7 +308,9 @@ test.describe('Kommentieren', () => {
   test('Kommentare bleiben auf der Seite: Textfeld am Rand wächst mit, Verschieben und Größe enden an der Kante', async () => {
     const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
     const { page } = handle;
-    const at = await pageSpace(page);
+    // Mit dem Textwerkzeug kommen Knöpfe in die Leiste; in schmalen Fenstern bricht sie um und die Seite rückt
+    await page.getByTestId('tool-freetext').click();
+    const at = await stablePageSpace(page);
     const page0 = await page.getByTestId('annotation-overlay-0').boundingBox();
     if (!page0) throw new Error('Seite ohne Größe');
     const inside = (box: { x: number; y: number; width: number; height: number } | null) => {
@@ -306,7 +322,6 @@ test.describe('Kommentieren', () => {
       expect(box.y + box.height).toBeLessThanOrEqual(page0.y + page0.height + 6);
     };
     // Klick ohne Ziehen dicht an der rechten unteren Ecke: Textfeld in Standardgröße ganz auf der Seite
-    await page.getByTestId('tool-freetext').click();
     await page.mouse.click(at(585, 830).x, at(585, 830).y);
     const editor = page.getByTestId('freetext-editor');
     await expect(editor).toBeFocused();
@@ -357,7 +372,7 @@ test.describe('Kommentieren', () => {
     await page.getByTestId('tool-freetext').click();
     // Mit dem Werkzeug stehen die Knöpfe schon da, wirken aber erst im Textfeld
     await expect(page.getByTestId('list-bullets')).toBeDisabled();
-    const at = await pageSpace(page);
+    const at = await stablePageSpace(page);
     await drag(page, at(60, 500), at(400, 560));
     const editor = page.getByTestId('freetext-editor');
     await expect(editor).toBeFocused();
