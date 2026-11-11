@@ -32,6 +32,7 @@ import styles from '../annotations/CommentToolbar.module.css';
 import { addImage, reflowText, toggleContentEditing } from './actions';
 import { makeImageTextEditable } from './scan-text';
 import { applyToRichEditor } from './RichTextEditor';
+import { ListControls } from '../lists/ListControls';
 import type { ParagraphStyle } from '../../../shared/content';
 
 // Größe, Schrift oder Farbe gewählt: gilt für die Texteingabe, sonst für den ausgewählten Text, immer auch für neuen Text
@@ -227,6 +228,7 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
         testId="content-color"
         favoriteSet="text"
       />
+      <ListControls shown />
       <span className={styles.separator} />
       {selected && !selected.group && selected.unit?.kind === 'image' && (
         <IconButton

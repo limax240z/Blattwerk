@@ -91,7 +91,8 @@
 
 .paragraph {
   white-space: pre-wrap;
-
+  /* feste Breite: auch das mitwachsende Textfeld (field-sizing) bricht in ihr um */
+  max-width: 100%;
 }
 
 .warning {

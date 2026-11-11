@@ -40,6 +40,7 @@ import { updateAnnotation } from './controller';
 import { CustomStampDialog } from './CustomStampDialog';
 import { imageToPng, toBase64 } from '../signatures/signature-image';
 import { pickSources } from '../pages/actions';
+import { ListControls } from '../lists/ListControls';
 import styles from './CommentToolbar.module.css';
 
 const TOOLS: Array<{ tool: Tool; icon: LucideIcon }> = [
@@ -331,6 +332,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
           ))}
         </select>
       )}
+      <ListControls shown={target === 'freetext' && !readOnly} />
 
       {tool === 'stamp' && !readOnly && (
         <select

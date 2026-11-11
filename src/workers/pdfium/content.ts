@@ -19,6 +19,7 @@ import type { StampFont } from '../../shared/stamping';
 import { isSystemFontKey, type SystemFontKey, type TextFont } from '../../shared/fonts';
 import type { OcrWord } from '../../shared/ocr';
 import type { TextRun } from '../../shared/rich-text';
+import { hangingPrefix } from '../../shared/lists';
 import { withBuffer, withFloats, withWString, type Pdfium } from './memory';
 import type { Allocations } from './pages';
 
@@ -253,7 +254,7 @@ function applyOperation(m: Pdfium, doc: number, operation: ContentOperation, mem
           try {
             const widthOf = measureWith(m, ruler, 1, 1);
             const width = operation.width;
-            lines = wrapText(operation.lines.join('\n'), (line) => widthOf(line) <= width + 0.5);
+            lines = wrapText(operation.lines.join('\n'), (line, _i, indent) => indent + widthOf(line) <= width + 0.5, advanceWith(widthOf));
           } finally {
             m.FPDFPageObj_Destroy(ruler);
           }
@@ -265,13 +266,14 @@ function applyOperation(m: Pdfium, doc: number, operation: ContentOperation, mem
           for (let i = 0; i < rows.length; i++) {
             // Zeile i liegt um i · Zeilenhöhe unter der ersten, in der Leserichtung der angezeigten Seite
             const offset = i * step;
-            const x = operation.origin.x + sin * offset;
-            const y = startY - cos * offset;
+            const indent = rows[i]?.indent ?? 0;
+            const x = operation.origin.x + sin * offset + cos * indent;
+            const y = startY - cos * offset + sin * indent;
             if (operation.flow && rotation === 0 && i > 0 && y < operation.flow.bottom) return rows.slice(i);
             const line = rows[i] as WrappedLine;
             if (line.text === '') continue;
             const object = newTextObject(m, doc, operation.font, operation.size, line.text, operation.color);
-            writeMark(m, doc, object, { p: paragraph, ...(operation.width ? { w: operation.width } : {}), ...(line.hard ? { h: true } : {}) });
+            writeMark(m, doc, object, { p: paragraph, ...(operation.width ? { w: operation.width } : {}), ...(line.hard ? { h: true } : {}), ...leading(line.text) });
             m.FPDFPageObj_Transform(object, cos, sin, -sin, cos, x, y);
             m.FPDFPage_InsertObject(target, object);
           }
@@ -377,27 +379,38 @@ function removeObject(m: Pdfium, page: number, object: number): void {
 }
 
 // Bricht Text in Zeilen um: harte Umbrüche (\n) bleiben, sonst Wort für Wort, solange die Zeile in ihre Breite passt.
-// Ein Wort, das allein nicht passt, steht in einer eigenen Zeile. Leere Zeilen am Ende entfallen.
+// Ein Wort, das allein nicht passt, steht in einer eigenen Zeile. Leere Zeilen am Ende entfallen. Einzug am Anfang
+// einer Zeile bleibt; Folgezeilen eines Listeneintrags beginnen hinter seinem Zeichen (hängender Einzug, braucht
+// measure: Vorschub eines Textes).
 interface WrappedLine {
   text: string;
   // Zeile endet mit einem harten Umbruch (Absatzende oder Eingabetaste)
   hard: boolean;
+  // Abstand vom linken Rand (Punkt), nur bei Folgezeilen eines Listeneintrags
+  indent?: number;
 }
 
-function wrapText(text: string, fits: (line: string, index: number) => boolean): WrappedLine[] {
+function wrapText(text: string, fits: (line: string, index: number, indent: number) => boolean, measure?: (value: string) => number): WrappedLine[] {
   const out: WrappedLine[] = [];
   for (const block of text.split('\n')) {
+    const lead = /^[ \t]*/.exec(block)?.[0] ?? '';
+    const prefix = hangingPrefix(block);
+    const hang = prefix > 0 && measure ? measure(block.slice(0, prefix)) : 0;
     const words = block.split(/[ \t]+/).filter((word) => word !== '');
     let current = '';
+    let first = true;
     for (const word of words) {
-      const candidate = current ? `${current} ${word}` : word;
-      if (!current || fits(candidate, out.length)) current = candidate;
+      const indent = first ? 0 : hang;
+      const candidate = current ? `${current} ${word}` : first ? lead + word : word;
+      if (!current || fits(candidate, out.length, indent)) current = candidate;
       else {
-        out.push({ text: current, hard: false });
+        out.push({ text: current, hard: false, ...(indent > 0 ? { indent } : {}) });
+        first = false;
         current = word;
       }
     }
-    out.push({ text: current, hard: true });
+    const indent = first ? 0 : hang;
+    out.push({ text: current, hard: true, ...(indent > 0 ? { indent } : {}) });
   }
   while (out.length > 0 && out[out.length - 1]?.text === '') out.pop();
   return out;
@@ -436,7 +449,14 @@ function readMark(m: Pdfium, object: number): TextMark | undefined {
   if (p === null) return undefined;
   const w = withBuffer(m, 4, (ptr) => (m.FPDFPageObjMark_GetParamFloatValue(mark, 'W', ptr) ? (m.pdfium.getValue(ptr, 'float') as number) : null));
   const b = int('B');
-  return { p, ...(w !== null && w > 0 ? { w } : {}), ...(int('H') === 1 ? { h: true } : {}), ...(b !== null && b > 0 ? { b } : {}) };
+  const l = int('L');
+  return {
+    p,
+    ...(w !== null && w > 0 ? { w } : {}),
+    ...(int('H') === 1 ? { h: true } : {}),
+    ...(b !== null && b > 0 ? { b } : {}),
+    ...(l !== null && l > 0 ? { l } : {}),
+  };
 }
 
 function writeMark(m: Pdfium, doc: number, object: number, value: TextMark): void {
@@ -447,7 +467,14 @@ function writeMark(m: Pdfium, doc: number, object: number, value: TextMark): voi
   if (value.w) m.FPDFPageObjMark_SetFloatParam(doc, object, mark, 'W', value.w);
   if (value.h) m.FPDFPageObjMark_SetIntParam(doc, object, mark, 'H', 1);
   if (value.b) m.FPDFPageObjMark_SetIntParam(doc, object, mark, 'B', value.b);
+  if (value.l) m.FPDFPageObjMark_SetIntParam(doc, object, mark, 'L', value.l);
 }
+
+// Leerzeichen am Anfang eines Textes für die Kennzeichnung (fehlt, wenn keine da sind)
+const leading = (text: string): { l?: number } => {
+  const count = /^ */.exec(text)?.[0].length ?? 0;
+  return count > 0 ? { l: count } : {};
+};
 
 // Kennzahl eines neuen Absatzes (nur innerhalb der Seite von Bedeutung)
 const newParagraphId = () => 1 + Math.floor(Math.random() * 2 ** 30);
@@ -461,6 +488,12 @@ function measureWith(m: Pdfium, ruler: number, scaleX: number, scaleY: number): 
     withWString(m, value, (ptr) => m.FPDFText_SetText(ruler, ptr));
     return readFloats(m, 4, (ptr) => Boolean(m.FPDFPageObj_GetBounds(ruler, ptr, ptr + 4, ptr + 8, ptr + 12)))?.[2] ?? 0;
   };
+}
+
+// Vorschub eines Textes aus einer Messung seiner Breite: zählt auch Leerzeichen am Ende mit
+function advanceWith(widthOf: (value: string) => number): (value: string) => number {
+  const x = widthOf('x');
+  return (value) => (value === '' ? 0 : widthOf(`${value}x`) - x);
 }
 
 // Absatz oder Zeile neu setzen (ContentOperation editParagraph). Ohne Angaben behalten die Zeilen Schrift, Größe,
@@ -544,21 +577,22 @@ function setParagraph(
   const matrixFor = (i: number): number[] => {
     // Unverändert: die eigene Lage der Zeile (genau wie vorher)
     const own = matrices[i];
-    if (own && !box && factor === 1) return own;
-    return [first[0] ?? 1, 0, 0, first[3] ?? 1, x(i), firstY - i * gap];
+    const indent = out[i]?.indent ?? 0;
+    if (own && !box && factor === 1 && indent === 0) return own;
+    return [first[0] ?? 1, 0, 0, first[3] ?? 1, x(i) + indent, firstY - i * gap];
   };
 
   const ruler = make('x');
   let out: WrappedLine[];
   try {
     const widthOf = measureWith(m, ruler, first[0] ?? 1, first[3] ?? 1);
-    out = wrapText(text, (line, i) => x(i) + widthOf(line) <= right + 0.5);
+    out = wrapText(text, (line, i, indent) => x(i) + indent + widthOf(line) <= right + 0.5, advanceWith(widthOf));
   } finally {
     m.FPDFPageObj_Destroy(ruler);
   }
 
   const paragraph = firstInfo.mark?.p ?? newParagraphId();
-  const mark = (line: WrappedLine): TextMark => ({ p: paragraph, w: right - left, ...(line.hard ? { h: true } : {}) });
+  const mark = (line: WrappedLine): TextMark => ({ p: paragraph, w: right - left, ...(line.hard ? { h: true } : {}), ...leading(line.text) });
   groups.forEach((group, i) => {
     const line = out[i];
     const keepAnchor = reuse && line !== undefined && line.text !== '';
@@ -592,6 +626,8 @@ interface Token {
 
 interface RichLine {
   tokens: Token[];
+  // Abstand vom linken Rand: Folgezeilen eines Listeneintrags beginnen hinter seinem Zeichen
+  indent: number;
   hard: boolean;
   // Leerzeilen danach
   blank: number;
@@ -693,12 +729,26 @@ function addRichText(m: Pdfium, doc: number, page: number, listing: PageObjects,
         } else word.push(token);
       }
       if (word.length > 0) words.push({ spaces, word });
+      // Listeneintrag: Breite des Vorspanns (Einzug, Zeichen, Leerzeichen) als hängender Einzug der Folgezeilen
+      const prefix = hangingPrefix(block.tokens.map((token) => token.text).join(''));
+      let hang = 0;
+      if (prefix > 0) {
+        const lead: Token[] = [];
+        let count = 0;
+        for (const token of block.tokens) {
+          if (count >= prefix) break;
+          lead.push(token);
+          count += token.text.length;
+        }
+        if (count === prefix) hang = widthOf(lead);
+      }
       const blockLines: Token[][] = [];
       let current: Token[] = [];
       let currentWidth = 0;
       for (const entry of words) {
         const addition = widthOf(entry.spaces) + widthOf(entry.word);
-        if (current.length === 0 || !operation.width || currentWidth + addition <= operation.width + 0.5) {
+        const room = (operation.width ?? 0) - (blockLines.length > 0 ? hang : 0);
+        if (current.length === 0 || !operation.width || currentWidth + addition <= room + 0.5) {
           // Am Zeilenanfang nach einem Umbruch entfällt der Leerraum davor
           const lead = current.length === 0 && blockLines.length > 0 ? [] : entry.spaces;
           current.push(...lead, ...entry.word);
@@ -712,7 +762,7 @@ function addRichText(m: Pdfium, doc: number, page: number, listing: PageObjects,
       blockLines.push(current);
       blockLines.forEach((tokens, i) => {
         const size = tokens.length > 0 ? Math.max(...tokens.map((token) => (runs[token.run] as TextRun).size)) : block.size;
-        lines.push({ tokens, hard: i === blockLines.length - 1, blank: 0, size });
+        lines.push({ tokens, hard: i === blockLines.length - 1, blank: 0, size, indent: i > 0 ? hang : 0 });
       });
     }
     // Leere Zeilen am Ende entfallen; Leerzeilen merkt sich die Zeile davor
@@ -742,7 +792,7 @@ function addRichText(m: Pdfium, doc: number, page: number, listing: PageObjects,
         // Leerraum am Zeilenende zeichnet nichts
         const tokens = [...line.tokens];
         while (tokens.length > 0 && tokens[tokens.length - 1]?.space) tokens.pop();
-        let advance = 0;
+        let advance = line.indent;
         let start = 0;
         while (start < tokens.length) {
           // Benachbarte Zeichen desselben Stücks werden ein Objekt
@@ -756,6 +806,7 @@ function addRichText(m: Pdfium, doc: number, page: number, listing: PageObjects,
             ...(operation.width ? { w: operation.width } : {}),
             ...(line.hard ? { h: true } : {}),
             ...(line.hard && line.blank > 0 ? { b: line.blank } : {}),
+            ...(start === 0 ? leading(value) : {}),
           });
           m.FPDFPageObj_Transform(object, cos, sin, -sin, cos, x0 + cos * advance, y0 + sin * advance);
           m.FPDFPage_InsertObject(target, object);

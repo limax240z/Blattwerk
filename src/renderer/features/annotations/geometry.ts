@@ -92,11 +92,18 @@ export function withRect(a: Annotation, rect: Rect): Annotation {
   return { ...a, rect: normalizeRect(rect) };
 }
 
-// Größe ändern an einer Ecke (fixed bleibt stehen). Unterschriften behalten ihr Seitenverhältnis.
-export function resizeFrom(a: Annotation, fixed: Point, to: Point): Annotation {
+// Größe ändern an einer Ecke (fixed bleibt stehen). Unterschriften behalten ihr Seitenverhältnis. Mit page endet die
+// Ecke am Seitenrand.
+export function resizeFrom(a: Annotation, fixed: Point, target: Point, page?: Rect): Annotation {
+  const to = page ? clampToRect(target, page) : target;
   if (a.kind !== 'signature') return withRect(a, [fixed.x, fixed.y, to.x, to.y]);
   const aspect = a.imageHeight / a.imageWidth;
-  const width = Math.max(8, Math.abs(to.x - fixed.x));
+  let width = Math.max(8, Math.abs(to.x - fixed.x));
+  if (page) {
+    // Die Höhe folgt der Breite: so weit begrenzen, dass auch sie auf die Seite passt
+    const room = to.y >= fixed.y ? page[3] - fixed.y : fixed.y - page[1];
+    if (room > 0) width = Math.min(width, room / aspect);
+  }
   const height = width * aspect;
   const x2 = to.x >= fixed.x ? fixed.x + width : fixed.x - width;
   const y2 = to.y >= fixed.y ? fixed.y + height : fixed.y - height;
@@ -154,4 +161,56 @@ export function quadsFromRects(rects: Rect[]): Quad[] {
 
 export function rectOfQuads(quads: Quad[]): Rect {
   return boundsOf(quads.flat());
+}
+
+// Inhalt eines Kommentars ohne Zugabe für Strichstärke oder Pfeilspitze (für die Begrenzung auf die Seite)
+export function contentBounds(a: Annotation): Rect {
+  if (a.kind === 'ink') return boundsOf(a.paths.flat());
+  if (a.kind === 'line' || a.kind === 'arrow') return boundsOf([a.start, a.end]);
+  return a.rect;
+}
+
+// Verschiebung so begrenzen, dass bounds nicht über die Seite hinausgeht. Was schon hinausragt (etwa aus einer anderen
+// App), darf bleiben, aber nicht weiter hinaus.
+export function clampMove([l, b, r, t]: Rect, dx: number, dy: number, [pl, pb, pr, pt]: Rect): { dx: number; dy: number } {
+  const limit = (value: number, low: number, high: number) => Math.min(Math.max(value, Math.min(0, low)), Math.max(0, high));
+  return { dx: limit(dx, pl - l, pr - r), dy: limit(dy, pb - b, pt - t) };
+}
+
+// Verschiebung, die bounds ganz auf die Seite bringt. Ist es größer als die Seite, bündig links bzw. oben.
+export function fitOnPage([l, b, r, t]: Rect, [pl, pb, pr, pt]: Rect): { dx: number; dy: number } {
+  const axis = (low: number, high: number, pageLow: number, pageHigh: number, alignHigh: boolean) => {
+    if (high - low > pageHigh - pageLow) return alignHigh ? pageHigh - high : pageLow - low;
+    if (low < pageLow) return pageLow - low;
+    if (high > pageHigh) return pageHigh - high;
+    return 0;
+  };
+  return { dx: axis(l, r, pl, pr, false), dy: axis(b, t, pb, pt, true) };
+}
+
+// Neuen Kommentar ganz auf die Seite schieben (Klick am Rand: Stempel, Notiz, Textfeld in Standardgröße)
+export function keepOnPage<T extends Annotation>(a: T, page: Rect): T {
+  const { dx, dy } = fitOnPage(contentBounds(a), page);
+  return dx === 0 && dy === 0 ? a : (translate(a, dx, dy) as T);
+}
+
+// Lage eines Textfelds in der Ansicht: mindestens so hoch wie aufgezogen, mit dem Text wachsend, nie über die Seite
+export function fitFreeText(r: { y: number; h: number }, needed: number, pageHeight: number): { y: number; h: number } {
+  const h = Math.min(pageHeight, Math.max(r.h, Math.ceil(needed) + 2));
+  const y = Math.max(0, Math.min(r.y, pageHeight - h));
+  return { y, h };
+}
+
+// Größter Faktor, um den bounds um fixed wachsen kann, ohne über die Seite hinauszuragen. Ragt es schon hinaus,
+// bleibt wenigstens die jetzige Größe möglich.
+export function maxScale([l, b, r, t]: Rect, fixed: Point, [pl, pb, pr, pt]: Rect): number {
+  let limit = Infinity;
+  const check = (value: number, origin: number, low: number, high: number) => {
+    const d = value - origin;
+    if (d > 1e-6) limit = Math.min(limit, (high - origin) / d);
+    else if (d < -1e-6) limit = Math.min(limit, (low - origin) / d);
+  };
+  for (const x of [l, r]) check(x, fixed.x, pl, pr);
+  for (const y of [b, t]) check(y, fixed.y, pb, pt);
+  return Math.max(1, limit);
 }

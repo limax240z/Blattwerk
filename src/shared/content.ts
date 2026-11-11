@@ -39,6 +39,8 @@ export interface TextMark {
   w?: number;
   h?: boolean;
   b?: number;
+  // Leerzeichen am Anfang des Objekts (Einzug einer Liste): PDFium liest mehrere davon nicht zuverlässig aus
+  l?: number;
 }
 
 export interface PageFontInfo {
@@ -217,7 +219,8 @@ function lineRuns(pieces: PageObjectInfo[], fonts: Fonts): TextRun[] {
   let text = '';
   pieces.forEach((piece, i) => {
     const previous = pieces[i - 1];
-    const own = piece.text ?? '';
+    const lead = piece.mark?.l;
+    const own = lead ? ' '.repeat(lead) + (piece.text ?? '').replace(/^\s+/, '') : (piece.text ?? '');
     const last = runs[runs.length - 1];
     // PDFium hängt beim Auslesen oft selbst ein Leerzeichen an ein Stück; beginnt das nächste mit einem, gilt dieses
     if (last && /\s$/.test(last.text) && /^\s/.test(own)) {

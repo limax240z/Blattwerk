@@ -5,7 +5,7 @@ import { DEFAULT_FIELD_SIZE, MIN_FIELD_SIDE, type FieldKind } from '../../../sha
 import type { PageGeometry } from '../../engine/coords';
 import { getRuntime } from '../../engine/runtime';
 import { useFormEdit, type FieldWidget } from '../../state/form-edit-store';
-import { dragRect } from '../annotations/geometry';
+import { clampMove, clampToRect, dragRect, fitOnPage, pageRect } from '../annotations/geometry';
 import { moveField, openFieldProperties, startCreateField } from './actions';
 import { pageWidgets } from './field-widgets';
 import styles from './FormEditOverlay.module.css';
@@ -82,8 +82,11 @@ export function FormEditOverlay({ tabId, pageIndex, geometry, scale }: FormEditO
       const svg = svgRef.current;
       const box = svg?.getBoundingClientRect();
       if (!svg || !box || box.width === 0) return;
-      const vx = ((pointer.current.x - current.client.x) / box.width) * geometry.width;
-      const vy = ((pointer.current.y - current.client.y) / box.height) * geometry.height;
+      // Versatz aus dem (auf die Seite begrenzten) Verschieben in PDF-Punkten, umgerechnet in die Ansicht
+      const [ox, oy] = geometry.toView(current.origin);
+      const [mx, my] = geometry.toView({ x: current.origin.x + current.dx, y: current.origin.y + current.dy });
+      const vx = mx - ox;
+      const vy = my - oy;
       for (const group of svg.querySelectorAll(`[data-move-ref="${CSS.escape(current.widget.ref)}"]`)) group.setAttribute('transform', `translate(${vx} ${vy})`);
     });
   };
@@ -162,9 +165,10 @@ export function FormEditOverlay({ tabId, pageIndex, geometry, scale }: FormEditO
     if (!current) return;
     const at = toPdf(event);
     pointer.current = { x: event.clientX, y: event.clientY };
-    if (current.kind === 'create') scheduleGesture({ ...current, to: at });
-    else if (current.kind === 'move') scheduleGesture({ ...current, dx: at.x - current.origin.x, dy: at.y - current.origin.y });
-    else scheduleGesture({ ...current, to: at });
+    // Felder bleiben auf der Seite
+    const page = pageRect(geometry);
+    if (current.kind === 'move') scheduleGesture({ ...current, ...clampMove(current.widget.rect, at.x - current.origin.x, at.y - current.origin.y, page) });
+    else scheduleGesture({ ...current, to: clampToRect(at, page) });
   };
 
   const finish = () => {
@@ -172,7 +176,10 @@ export function FormEditOverlay({ tabId, pageIndex, geometry, scale }: FormEditO
     setGesture(null);
     if (!current) return;
     if (current.kind === 'create') {
-      const rect = dragRect(current.from, current.to, DEFAULT_FIELD_SIZE[current.tool]);
+      // Klick am Rand: Feld in Standardgröße ganz auf die Seite schieben
+      const drawn = dragRect(current.from, current.to, DEFAULT_FIELD_SIZE[current.tool]);
+      const { dx, dy } = fitOnPage(drawn, pageRect(geometry));
+      const rect = translated(drawn, dx, dy);
       const [l, b, r, top] = rect;
       if (r - l < MIN_FIELD_SIDE || top - b < MIN_FIELD_SIDE) return;
       useFormEdit.getState().setTool('select');

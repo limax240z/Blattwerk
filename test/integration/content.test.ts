@@ -293,6 +293,57 @@ describe('Inhalt bearbeiten', () => {
     }
   });
 
+  it('Listen: Folgezeilen beginnen hinter dem Aufzählungszeichen, Einzug bleibt', async () => {
+    const doc = await PDFDocument.create();
+    doc.addPage([400, 400]);
+    const bytes = await doc.save();
+    const black = { r: 0, g: 0, b: 0 };
+    const text = '• eins zwei drei vier fünf sechs sieben acht neun zehn\n    1. elf zwölf dreizehn vierzehn fünfzehn sechzehn';
+    const runs = [{ text, size: 12, color: black, font: 'Helvetica' as const }];
+    const output = run(bytes, [{ type: 'addRichText', pageIndex: 0, origin: { x: 50, y: 350 }, runs, width: 150 }]);
+    const list = await items(output);
+    const font = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    const x = (str: string) => list.find((item) => item.str.includes(str))?.transform[4] ?? 0;
+    const first = list.find((item) => item.str.includes('eins'));
+    // Erste Zeile beginnt am Rand mit dem Zeichen, die Folgezeilen dort, wo der Text nach dem Zeichen beginnt
+    expect(first?.str.startsWith('•')).toBe(true);
+    expect(x('eins')).toBeCloseTo(50, 0);
+    const hang = 50 + font.widthOfTextAtSize('• ', 12);
+    const continued = list.filter((item) => (item.transform[5] ?? 0) < (first?.transform[5] ?? 0) - 1 && !item.str.includes('1.') && (item.transform[5] ?? 0) > (list.find((i) => i.str.includes('1.'))?.transform[5] ?? 0));
+    expect(continued.length).toBeGreaterThan(0);
+    for (const item of continued) expect(item.transform[4] ?? 0).toBeCloseTo(hang, 0);
+    // Eingerückter Eintrag: die Leerzeichen davor bleiben, Folgezeilen hinter „1. “
+    const numbered = list.find((item) => item.str.includes('1.'));
+    // pdf.js lässt die Leerzeichen am Anfang im Text weg; der Eintrag beginnt um ihre Breite eingerückt
+    expect(numbered?.transform[4] ?? 0).toBeCloseTo(50 + font.widthOfTextAtSize('    ', 12), 0);
+    const after = list.filter((item) => (item.transform[5] ?? 0) < (numbered?.transform[5] ?? 0) - 1);
+    expect(after.length).toBeGreaterThan(0);
+    // Auf einen Punkt genau (pdf-lib und PDFium runden die Breiten etwas verschieden)
+    for (const item of after) expect(Math.abs((item.transform[4] ?? 0) - (50 + font.widthOfTextAtSize('    1. ', 12)))).toBeLessThan(1);
+    // Alle Zeilen bleiben in der Breite
+    for (const item of list) expect((item.transform[4] ?? 0) + font.widthOfTextAtSize(item.str.trimEnd(), 12)).toBeLessThanOrEqual(201);
+    // Wieder gelesen: ein Textblock mit dem Text wie geschrieben (Einzug und Zeichen inklusive)
+    const listing = engine.listObjects(output, null, [0])[0];
+    const units = editUnits(listing?.objects ?? [], listing?.fonts);
+    expect(units).toHaveLength(1);
+    expect(units[0]?.text).toBe(text);
+    expect(units[0]?.origin?.x).toBeCloseTo(50, 1);
+  });
+
+  it('Listen in fremdem Absatz: Einzug und hängender Einzug beim Neusetzen', async () => {
+    const bytes = await paragraphPdf();
+    const listing = engine.listObjects(bytes, null, [0])[0];
+    const paragraph = editUnits(listing?.objects ?? [], listing?.fonts).find((unit) => unit.text?.startsWith('Dies ist'));
+    const text = '• Dies ist ein deutlich längerer Eintrag, der nach der Änderung mehrere Zeilen braucht und hinter dem Punkt weiterläuft.';
+    const output = run(bytes, [{ type: 'editParagraph', pageIndex: 0, lines: paragraph?.lines ?? [], text }]);
+    const list = (await items(output)).filter((item) => (item.transform[4] ?? 0) >= 49 && (item.transform[5] ?? 0) > 220);
+    const font = await (await PDFDocument.create()).embedFont(StandardFonts.Helvetica);
+    expect(list.length).toBeGreaterThan(1);
+    expect(list[0]?.str.startsWith('• ')).toBe(true);
+    expect(list[0]?.transform[4]).toBeCloseTo(50, 0);
+    for (const item of list.slice(1)) expect(item.transform[4] ?? 0).toBeCloseTo(50 + font.widthOfTextAtSize('• ', 10), 0);
+  });
+
   it('bricht einen geänderten Absatz in seiner Breite neu um', async () => {
     const bytes = await paragraphPdf();
     const listing = engine.listObjects(bytes, null, [0])[0];

@@ -1580,5 +1580,23 @@
   "commands": {
     "title": "Befehle",
     "close": "Schließen"
+  },
+  "lists": {
+    "bullets": "Aufzählung",
+    "numbering": "Nummerierung",
+    "indent": "Einzug vergrößern (Tab)",
+    "outdent": "Einzug verkleinern (Umschalt+Tab)",
+    "choose": "Art der {{list}} wählen",
+    "sample": "Text",
+    "kinds": {
+      "bullet": "Punkt",
+      "dash": "Strich",
+      "circle": "Kreis",
+      "decimal": "1. 2. 3.",
+      "decimalParen": "1) 2) 3)",
+      "lowerParen": "a) b) c)",
+      "upper": "A. B. C.",
+      "roman": "i. ii. iii."
+    }
   }
 }

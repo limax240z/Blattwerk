@@ -2,6 +2,7 @@
 // Alle Änderungen laufen als umkehrbare Befehle über den Kommentar-Speicher.
 import type {
   Annotation,
+  Rect,
   Reply,
   ReviewStatus,
   StatusEntry,
@@ -167,6 +168,13 @@ export function setContents(tabId: string, id: string, contents: string): void {
   const before = find(tabId, id);
   if (!before || before.contents === contents) return;
   updateAnnotation(tabId, before, { ...before, contents } as Annotation);
+}
+
+// Text und Lage zugleich (Textfeld, das beim Tippen gewachsen ist): ein Schritt zum Rückgängigmachen
+export function setContentsAndRect(tabId: string, id: string, contents: string, rect: Rect): void {
+  const before = find(tabId, id);
+  if (!before) return;
+  updateAnnotation(tabId, before, { ...before, contents, rect } as Annotation);
 }
 
 export function addReply(tabId: string, id: string, contents: string): void {
