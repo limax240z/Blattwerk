@@ -349,9 +349,15 @@ test.describe('Kommentieren', () => {
   test('Textfeld mit Aufzählung, Nummerierung und Einzug', async () => {
     const handle = await openCopy(TEXT_PDF.file, TEXT_PDF.pages);
     const { page, app, file } = handle;
-    const at = await pageSpace(page);
+    // Schmales Fenster: Erschienen die Knöpfe erst mit dem Textfeld, bräche die Leiste um, die Seite würde neu
+    // eingepasst und das neue Textfeld ginge verloren (so unter Windows aufgetreten)
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1100, 900));
+    await menuClick(app, 'view.fitPage');
     await expect(page.getByTestId('list-controls')).toHaveCount(0);
     await page.getByTestId('tool-freetext').click();
+    // Mit dem Werkzeug stehen die Knöpfe schon da, wirken aber erst im Textfeld
+    await expect(page.getByTestId('list-bullets')).toBeDisabled();
+    const at = await pageSpace(page);
     await drag(page, at(60, 500), at(400, 560));
     const editor = page.getByTestId('freetext-editor');
     await expect(editor).toBeFocused();
@@ -378,7 +384,7 @@ test.describe('Kommentieren', () => {
     await page.keyboard.press('Shift+Tab');
     await expect(editor).toHaveValue('a) Äpfel\nb) Sorten\nc) Birnen');
     await page.keyboard.press('Escape');
-    await expect(page.getByTestId('list-controls')).toHaveCount(0);
+    await expect(page.getByTestId('list-bullets')).toBeDisabled();
     await expect(cards(page)).toContainText('b) Sorten');
     await save(page, app);
     const raw = readFileSync(file).toString('latin1');

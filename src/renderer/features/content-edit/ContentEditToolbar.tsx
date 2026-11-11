@@ -228,7 +228,7 @@ export function ContentEditToolbar({ tab }: { tab: TabState }) {
         testId="content-color"
         favoriteSet="text"
       />
-      <ListControls />
+      <ListControls shown />
       <span className={styles.separator} />
       {selected && !selected.group && selected.unit?.kind === 'image' && (
         <IconButton

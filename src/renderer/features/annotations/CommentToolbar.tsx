@@ -332,7 +332,7 @@ export function CommentToolbar({ tab }: { tab: TabState }) {
           ))}
         </select>
       )}
-      <ListControls />
+      <ListControls shown={target === 'freetext' && !readOnly} />
 
       {tool === 'stamp' && !readOnly && (
         <select

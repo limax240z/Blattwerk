@@ -1,5 +1,7 @@
-// Knöpfe für Aufzählung, Nummerierung und Einzug. Erscheinen nur, solange eine Texteingabe offen ist; der Fokus bleibt
-// dabei in der Eingabe (kein Klick nimmt ihn ihr weg).
+// Knöpfe für Aufzählung, Nummerierung und Einzug; der Fokus bleibt dabei in der Eingabe (kein Klick nimmt ihn ihr weg).
+// Sie stehen schon in der Leiste, sobald ein Textwerkzeug gewählt ist (shown), und wirken, solange eine Eingabe offen
+// ist. Erschienen sie erst mit der Eingabe, könnte die Leiste umbrechen: Die Seite würde neu eingepasst und die gerade
+// geöffnete Eingabe verlöre den Fokus.
 import { ChevronDown, IndentDecrease, IndentIncrease, List, ListOrdered, type LucideIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -12,19 +14,20 @@ import { applyListAction, useListTarget } from './list-bridge';
 // Kennzeichnung der Listenmenüs (Klicks darin beenden keine Texteingabe)
 export const LIST_MENU_ATTRIBUTE = 'data-list-menu';
 
-export function ListControls({ separator = true }: { separator?: boolean }) {
+export function ListControls({ shown }: { shown: boolean }) {
   const { t } = useTranslation();
   const active = useListTarget((s) => s.target !== null);
-  if (!active) return null;
+  if (!active && !shown) return null;
   return (
     <>
-      {separator && <span className={styles.separator} />}
+      <span className={styles.separator} />
       <div className={styles.group} data-testid="list-controls">
-        <ListMenu icon={List} label={t('lists.bullets')} kinds={BULLET_KINDS} testId="list-bullets" />
-        <ListMenu icon={ListOrdered} label={t('lists.numbering')} kinds={NUMBER_KINDS} testId="list-numbers" />
+        <ListMenu icon={List} label={t('lists.bullets')} kinds={BULLET_KINDS} disabled={!active} testId="list-bullets" />
+        <ListMenu icon={ListOrdered} label={t('lists.numbering')} kinds={NUMBER_KINDS} disabled={!active} testId="list-numbers" />
         <IconButton
           icon={IndentDecrease}
           label={t('lists.outdent')}
+          disabled={!active}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => applyListAction({ type: 'indent', delta: -1 })}
           data-testid="list-outdent"
@@ -32,6 +35,7 @@ export function ListControls({ separator = true }: { separator?: boolean }) {
         <IconButton
           icon={IndentIncrease}
           label={t('lists.indent')}
+          disabled={!active}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => applyListAction({ type: 'indent', delta: 1 })}
           data-testid="list-indent"
@@ -42,7 +46,7 @@ export function ListControls({ separator = true }: { separator?: boolean }) {
 }
 
 // Knopf wendet die erste Art an; der Pfeil daneben öffnet die Auswahl aller Arten (mit Vorschau der Zeichen)
-function ListMenu({ icon, label, kinds, testId }: { icon: LucideIcon; label: string; kinds: readonly ListKind[]; testId: string }) {
+function ListMenu({ icon, label, kinds, disabled, testId }: { icon: LucideIcon; label: string; kinds: readonly ListKind[]; disabled: boolean; testId: string }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState<{ left: number; top: number } | null>(null);
   const [kind, setKind] = useState<ListKind>(kinds[0] as ListKind);
@@ -71,6 +75,7 @@ function ListMenu({ icon, label, kinds, testId }: { icon: LucideIcon; label: str
       <IconButton
         icon={icon}
         label={`${label}: ${t(`lists.kinds.${kind}`)}`}
+        disabled={disabled}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => applyListAction({ type: 'toggle', kind })}
         data-testid={testId}
@@ -80,6 +85,7 @@ function ListMenu({ icon, label, kinds, testId }: { icon: LucideIcon; label: str
         className={styles.splitToggle}
         aria-label={t('lists.choose', { list: label })}
         aria-expanded={open !== null}
+        disabled={disabled}
         data-tooltip={t('lists.choose', { list: label })}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => {

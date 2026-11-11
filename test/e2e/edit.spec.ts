@@ -541,7 +541,8 @@ test.describe('Textfelder: Breite, Größe, Schrift, Farbe', () => {
 
   test('neuer und vorhandener Text: Nummerierung, Aufzählung und Einzug', async () => {
     const { page, close } = await openActualSize();
-    await expect(page.getByTestId('list-controls')).toHaveCount(0);
+    // Ausgegraut, bis eine Eingabe offen ist
+    await expect(page.getByTestId('list-bullets')).toBeDisabled();
     await page.getByTestId('content-tool-text').click();
     const overlay = await page.getByTestId('content-edit-overlay-0').boundingBox();
     if (!overlay) throw new Error('keine Ebene');

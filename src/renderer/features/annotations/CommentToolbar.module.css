@@ -236,3 +236,11 @@
 .listOptionCurrent:hover .listSample {
   color: inherit;
 }
+
+.splitToggle:disabled {
+  opacity: 0.4;
+}
+
+.splitToggle:disabled:hover {
+  background: transparent;
+}
