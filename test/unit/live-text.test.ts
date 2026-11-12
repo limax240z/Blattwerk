@@ -90,3 +90,24 @@ describe('Abgleich mit echtem Text', () => {
     expect(mostlyInside(word, [150, 498, 400, 522])).toBe(false);
   });
 });
+
+describe('Doppelseiten und Spalten', () => {
+  // Die Erkennung liest eine Buchdoppelseite als Zeilen über die ganze Breite; die rechte Seite steht etwas höher
+  const bbox = (x0: number, x1: number, y0: number, y1: number) => ({ x0, y0, x1, y1 });
+  const row = (y: number, left: string, right: string): OcrBlock['paragraphs'][number]['lines'][number] => ({
+    baseline: { x0: 0, y0: y + 30, x1: 2000, y1: y + 30 },
+    bbox: bbox(100, 1900, y - 20, y + 30),
+    words: [
+      { text: left, confidence: 90, bbox: bbox(100, 600, y, y + 30) },
+      { text: right, confidence: 90, bbox: bbox(1100, 1600, y - 20, y + 10) },
+    ],
+  });
+  const blocks: OcrBlock[] = [{ paragraphs: [{ lines: [row(100, 'links 1', 'rechts 1'), row(150, 'links 2', 'rechts 2'), row(200, 'links 3', 'rechts 3')] }] }];
+
+  it('teilt an großen Lücken, jedes Stück mit eigener Höhe, erst die linke Spalte, dann die rechte', () => {
+    const lines = selectableLines(blocks);
+    expect(lines.map((line) => line.words.map((word) => word.text).join(' '))).toEqual(['links 1', 'links 2', 'links 3', 'rechts 1', 'rechts 2', 'rechts 3']);
+    expect(lines[1]).toMatchObject({ top: 150, bottom: 180 });
+    expect(lines[4]).toMatchObject({ top: 130, bottom: 160 });
+  });
+});

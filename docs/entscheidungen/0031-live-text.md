@@ -54,3 +54,12 @@ von allen anderen Wörtern entfernt. Die Auswahl zeichnet `paintLiveSelection` a
 - `test/unit/live-text.test.ts`: Bildanteil, Zeilen, Abgleich mit echtem Text.
 - `test/e2e/comments.spec.ts`: Scan öffnen, Wort auswählen und kopieren, markieren (Lage auf dem Wort), Datei unverändert;
   Hervorheben ohne Text malt einen Textmarker-Strich.
+
+## Nachtrag 2026-11-12: Doppelseiten und Spalten
+
+Bei Buchscans (zwei Buchseiten auf einer PDF-Seite) liest die Erkennung jede Zeile über beide Seiten. Eine Auswahl auf
+der linken Seite lief dadurch durch die rechte, und weil die Zeilenhöhe über die ganze Breite galt, rutschten Wörter
+schräger Scans in die Zeile darüber (sie ließen sich nicht markieren). `selectableLines` teilt Zeilen deshalb an Lücken
+über 2,5 Zeilenhöhen in Stücke mit eigener Höhe und ordnet sie spaltenweise (`inColumns`: Stücke, die sich waagerecht
+überlappen, bilden eine Spalte; Spalten von links nach rechts). Verbindet ein Stück zwei Spalten, bleibt die bisherige
+Reihenfolge.
