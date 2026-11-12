@@ -2,7 +2,7 @@
 // Textzeilen ändern (mit Ersatzschrift, wenn Zeichen fehlen).
 import { init } from '@embedpdf/pdfium';
 import fontkit from '@cantoo/fontkit';
-import { degrees, PDFDict, PDFDocument, PDFName, StandardFonts } from '@cantoo/pdf-lib';
+import { degrees, PDFDict, PDFDocument, PDFName, rgb, StandardFonts } from '@cantoo/pdf-lib';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
@@ -573,6 +573,46 @@ describe('Inhalt bearbeiten', () => {
     expect(Math.round((scaled?.bounds[2] ?? 0) - (scaled?.bounds[0] ?? 0))).toBe(Math.round(2 * ((toc?.bounds[2] ?? 0) - (toc?.bounds[0] ?? 0))));
     const deleted = run(moved, [{ type: 'delete', pageIndex: 0, indices: [scaled?.index ?? -1] }]);
     expect((await items(deleted)).map((item) => item.str)).not.toContain('Inhaltsverzeichnis');
+  });
+
+  it('Zeichen einzeln gesetzt (wie aus dem Browser): Komma und Leerzeichen gehören zur Zeile, Linien sind Objekte', async () => {
+    const doc = await PDFDocument.create();
+    const font = await doc.embedFont(StandardFonts.Helvetica);
+    const page = doc.addPage([400, 400]);
+    // jedes Zeichen ein eigenes Textobjekt, Leerzeichen eingeschlossen
+    let x = 40;
+    for (const char of 'Hallo, Welt') {
+      page.drawText(char, { x, y: 300, size: 12, font });
+      x += font.widthOfTextAtSize(char, 12);
+    }
+    // eine kleine Tabelle aus Linien und eine graue Kopfzeile, darunter Text
+    page.drawRectangle({ x: 40, y: 200, width: 200, height: 20, color: rgb(0.85, 0.85, 0.85) });
+    page.drawLine({ start: { x: 40, y: 180 }, end: { x: 240, y: 180 }, thickness: 0.5 });
+    page.drawText('Darunter', { x: 40, y: 150, size: 12, font });
+    const bytes = await doc.save({ useObjectStreams: false });
+    const listing = engine.listObjects(bytes, null, [0])[0];
+    if (!listing) throw new Error('keine Objekte');
+    const units = editUnits(listing.objects, listing.fonts);
+    const line = units.find((unit) => unit.text?.startsWith('Hallo'));
+    expect(line?.text).toBe('Hallo, Welt');
+    expect(line?.members).toHaveLength(11);
+    // keine übrig gebliebenen Einzelstücke (Komma, Leerzeichen)
+    expect(units.filter((unit) => unit.kind === 'text').map((unit) => unit.text)).toEqual(['Hallo, Welt', 'Darunter']);
+    const paths = listing.objects.filter((object) => object.kind === 'path');
+    expect(paths).toHaveLength(2);
+    // Löschen nimmt Text samt Linien und Fläche heraus
+    const deleted = run(bytes, [{ type: 'delete', pageIndex: 0, indices: [...(line?.members ?? []), ...paths.map((path) => path.index)] }]);
+    const after = engine.listObjects(deleted, null, [0])[0];
+    expect(after?.objects.map((object) => object.text ?? object.kind)).toEqual(['Darunter']);
+  });
+
+  it('Hintergrund über die ganze Seite wird nicht angeboten', async () => {
+    const doc = await PDFDocument.create();
+    const page = doc.addPage([400, 400]);
+    page.drawRectangle({ x: 0, y: 0, width: 400, height: 400, color: rgb(1, 1, 0.9) });
+    page.drawRectangle({ x: 10, y: 10, width: 50, height: 50, color: rgb(0, 0, 1) });
+    const listing = engine.listObjects(await doc.save(), null, [0])[0];
+    expect(listing?.objects.map((object) => object.kind)).toEqual(['path']);
   });
 
   it('meldet fehlende Objekte', () => {

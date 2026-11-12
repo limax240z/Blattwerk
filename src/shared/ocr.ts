@@ -133,6 +133,8 @@ export interface SelectableLine {
 
 // So weit (in Zeilenhöhen) darf ein Zeichen ohne Buchstaben von den übrigen Wörtern der Zeile entfernt sein
 const NEIGHBOUR_REACH = 2.5;
+// Ab dieser Lücke (in Zeilenhöhen) zwischen zwei Wörtern beginnt ein neues Stück (andere Spalte oder Buchseite)
+const COLUMN_GAP = 2.5;
 
 // Papierkanten, Lochungen und Flecken liest die Erkennung als einzelne Zeichen („|“, „{“, „>“), oft in fast jeder Zeile.
 // Als Wörter ließen sie Auswahl und Markierung bis an den Rand der Seite reichen. Solche Stücke stehen allein: ohne
@@ -161,13 +163,45 @@ export function selectableLines(blocks: OcrBlock[] | null): SelectableLine[] {
           return !isDebris(word.text, before ? word.bbox.x0 - before.bbox.x1 : null, after ? after.bbox.x0 - word.bbox.x1 : null, reach);
         });
         if (kept.length === 0) continue;
-        lines.push({
-          top: Math.min(...kept.map((word) => word.bbox.y0)),
-          bottom: Math.max(...kept.map((word) => word.bbox.y1)),
-          words: kept.map((word) => ({ text: word.text, left: word.bbox.x0, right: word.bbox.x1 })),
+        // An großen Lücken teilen: Die Erkennung liest Doppelseiten (Buchscans) und Spalten oft als eine Zeile über die
+        // ganze Breite. Jedes Stück bekommt seine eigene Höhe (schräge Scans) und seine Spalte (Reihenfolge unten).
+        const gap = (heights[Math.floor(heights.length / 2)] ?? 0) * COLUMN_GAP;
+        let piece: typeof kept = [];
+        const flush = () => {
+          if (piece.length === 0) return;
+          lines.push({
+            top: Math.min(...piece.map((word) => word.bbox.y0)),
+            bottom: Math.max(...piece.map((word) => word.bbox.y1)),
+            words: piece.map((word) => ({ text: word.text, left: word.bbox.x0, right: word.bbox.x1 })),
+          });
+          piece = [];
+        };
+        kept.forEach((word, i) => {
+          const before = kept[i - 1];
+          if (before && word.bbox.x0 - before.bbox.x1 > gap) flush();
+          piece.push(word);
         });
+        flush();
       }
     }
   }
-  return lines;
+  return inColumns(lines);
+}
+
+// Lesereihenfolge: Stücke, die sich waagerecht überlappen, gehören zu einer Spalte; Spalten von links nach rechts, in
+// der Spalte in der Reihenfolge der Erkennung. Sonst liefe eine Auswahl auf der linken Buchseite durch die rechte.
+// Verbindet ein Stück zwei Spalten (Überschrift über beide), bleibt es bei einer Spalte und der bisherigen Reihenfolge.
+function inColumns(lines: SelectableLine[]): SelectableLine[] {
+  const span = (line: SelectableLine) => ({ left: line.words[0]?.left ?? 0, right: line.words[line.words.length - 1]?.right ?? 0 });
+  const columns: Array<{ left: number; right: number }> = [];
+  for (const { left, right } of lines.map(span).sort((a, b) => a.left - b.left)) {
+    const last = columns[columns.length - 1];
+    if (last && left < last.right) last.right = Math.max(last.right, right);
+    else columns.push({ left, right });
+  }
+  const column = (line: SelectableLine) => columns.findIndex((c) => span(line).left >= c.left && span(line).left < Math.max(c.right, c.left + 1));
+  return lines
+    .map((line, order) => ({ line, order, column: column(line) }))
+    .sort((a, b) => a.column - b.column || a.order - b.order)
+    .map(({ line }) => line);
 }

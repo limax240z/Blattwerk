@@ -63,6 +63,7 @@ interface UiState {
   authorName: string;
   // Lesemodus mit Vollbild (aus den Einstellungen)
   readModeFullscreen: boolean;
+  closeGaps: boolean;
   commentToolsVisible: boolean;
   // Leiste „Schwärzen“ (Phase 5) und ihre Dialoge
   redactToolsVisible: boolean;
@@ -166,6 +167,7 @@ export const useUi = create<UiState>((set) => ({
   searchFocusHandled: 0,
   authorName: '',
   readModeFullscreen: true,
+  closeGaps: true,
   commentToolsVisible: false,
   markToolsVisible: false,
   redactToolsVisible: false,
@@ -204,7 +206,7 @@ export const useUi = create<UiState>((set) => ({
     set((state) => ({ rightPanelVisible: true, searchFocusRequest: state.searchFocusRequest + 1 })),
   markSearchFocusHandled: (request) => set({ searchFocusHandled: request }),
   setAuthorName: (authorName) => set({ authorName }),
-  applySettings: ({ authorName, readModeFullscreen }) => set({ authorName, readModeFullscreen }),
+  applySettings: ({ authorName, readModeFullscreen, closeGaps }) => set({ authorName, readModeFullscreen, closeGaps }),
   // Kommentieren und Schwärzen nutzen dieselbe Ebene; es ist immer nur eine der beiden Leisten offen.
   // Höchstens eine der Leisten „Kommentieren“, „Schwärzen“ und „Markieren“ ist offen
   setCommentToolsVisible: (commentToolsVisible) =>

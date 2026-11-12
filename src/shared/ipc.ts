@@ -22,6 +22,7 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsSetAuthor: 'settings:set-author',
   settingsSetReadModeFullscreen: 'settings:set-read-mode-fullscreen',
+  settingsSetCloseGaps: 'settings:set-close-gaps',
   // Phase 3: Quelldateien wählen (PDFs, Bilder) und neue Dokumente speichern
   pickFiles: 'files:pick',
   registerDropped: 'files:register-dropped',
@@ -298,6 +299,8 @@ export interface AppSettings {
   authorName: string;
   // Lesemodus schaltet das Fenster in den Vollbildmodus (Mac und Windows; auf dem iPad gibt es keinen)
   readModeFullscreen: boolean;
+  // Nach dem Löschen im Modus „Inhalt bearbeiten“ rückt Darunterstehendes nach oben (ADR 0033)
+  closeGaps: boolean;
 }
 
 export interface AppInfo {

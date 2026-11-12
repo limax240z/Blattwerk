@@ -132,6 +132,7 @@ const MAX_PINNED = 15;
 
 interface Settings {
   authorName: string | null;
+  closeGaps?: boolean;
   lastId: { name: string; bookmark: string } | null;
 }
 const SETTINGS_FILE = 'settings.json';
@@ -249,6 +250,10 @@ export function createIosApi(): BlattwerkApi {
     return next;
   };
   const authorName = async () => (await settings()).authorName ?? '';
+  const appSettings = async (): Promise<AppSettings> => {
+    const current = await settings();
+    return { authorName: current.authorName ?? '', readModeFullscreen: false, closeGaps: current.closeGaps !== false };
+  };
 
   const templateCache = new Map<string, Promise<Uint8Array>>();
   // Seitengröße und Ränder in Punkt: Der Druck von WebKit beachtet @page nicht, die Hülle setzt sie selbst. Ohne Angabe A4
@@ -630,13 +635,17 @@ export function createIosApi(): BlattwerkApi {
       },
     },
     // Vollbild gibt es auf dem iPad nicht; die Einstellung dazu zeigt die Oberfläche dort nicht an
-    getSettings: async (): Promise<AppSettings> => ({ authorName: await authorName(), readModeFullscreen: false }),
+    getSettings: appSettings,
     setAuthorName: async (name) => {
       const valid = validateAuthorName(name);
       if (valid !== null) await updateSettings({ authorName: valid });
-      return { authorName: await authorName(), readModeFullscreen: false };
+      return appSettings();
     },
-    setReadModeFullscreen: async () => ({ authorName: await authorName(), readModeFullscreen: false }),
+    setReadModeFullscreen: appSettings,
+    setCloseGaps: async (on) => {
+      await updateSettings({ closeGaps: on === true });
+      return appSettings();
+    },
     // Auf dem iPad schließt man die App nicht über Blattwerk; ungespeicherte Stände bleiben bis zum Sichern im Tab
     confirmClose: () => undefined,
     cancelClose: () => undefined,

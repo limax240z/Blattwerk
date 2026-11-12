@@ -328,12 +328,14 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
     });
   };
 
-  // Alle Einheiten, die das Rechteck berührt (in Ansichtskoordinaten verglichen, auch bei gedrehten Seiten)
+  // Alle Einheiten, die das Rechteck berührt (in Ansichtskoordinaten verglichen, auch bei gedrehten Seiten). Linien und
+  // Flächen nur, wenn das Rechteck sie ganz umschließt (sonst erfasst jeder Rahmen über einer Tabelle ihre Linien).
+  // Leere Textstücke (Leerzeichen) kommen mit, damit beim Löschen nichts davon zurückbleibt.
   const selectInView = (x0: number, x1: number, y0: number, y1: number, additive: boolean) => {
     const hit = objects.filter((object) => {
-      if (blank(object)) return false;
       const r = geometry.rectToView(object.bounds);
-      return r.x < x1 && r.x + r.w > x0 && r.y < y1 && r.y + r.h > y0;
+      if (object.kind === 'path') return r.x >= x0 - 1 && r.x + r.w <= x1 + 1 && r.y >= y0 - 1 && r.y + r.h <= y1 + 1;
+      return r.x <= x1 && r.x + r.w >= x0 && r.y <= y1 && r.y + r.h >= y0 && (!blank(object) || (r.x >= x0 && r.x + r.w <= x1 && r.y >= y0 && r.y + r.h <= y1));
     });
     const base = additive ? groupUnits().filter((unit) => !hit.some((other) => other.index === unit.index)) : [];
     selectUnits([...base, ...hit]);
@@ -522,24 +524,25 @@ export function ContentEditOverlay({ tabId, pageIndex, geometry, scale }: Props)
           </g>
         )}
         {/* Text oben, sonst kleine Objekte oben: Text auf einem Bild oder einer Fläche bleibt anklickbar, auch wenn das
-            Bild später im Seiteninhalt steht. Leere Textstücke (nur Leerzeichen) fangen keine Klicks ab. */}
+            Bild später im Seiteninhalt steht. Leere Textstücke (nur Leerzeichen) erscheinen nicht. */}
         {stacked.map((object) => {
           const moving = pending?.pageIndex === pageIndex ? pending.bounds[object.index] : undefined;
           const r = geometry.rectToView(moving ?? previewBounds(object, gesture));
           const isSelected =
             selected?.pageIndex === pageIndex && (selected.index === object.index || (selected.group?.some((unit) => unit.index === object.index) ?? false));
           const hidden = editing?.mode === 'edit' && editing.index === object.index;
-          if (hidden) return null;
+          // Leere Textstücke (Leerzeichen ohne Zeile) sind unsichtbar und nicht anklickbar
+          if (hidden || blank(object)) return null;
           return (
             <rect
               key={object.index}
-              className={[styles.object, styles[object.kind] ?? '', isSelected ? styles.selected : '', tool !== 'select' || blank(object) ? styles.passive : ''].join(' ')}
+              className={[styles.object, styles[object.kind] ?? '', isSelected ? styles.selected : '', tool !== 'select' ? styles.passive : ''].join(' ')}
               x={r.x}
               y={r.y}
               width={Math.max(r.w, 2)}
               height={Math.max(r.h, 2)}
               onPointerDown={(event) => onObjectPointerDown(event, object)}
-              onDoubleClick={() => (object.kind === 'image' ? useUi.getState().notify(t('contentEdit.imageText')) : startEdit(object))}
+              onDoubleClick={() => (object.kind === 'image' ? useUi.getState().notify(t('contentEdit.imageText')) : object.kind === 'text' ? startEdit(object) : undefined)}
               data-testid="content-object"
               data-kind={object.kind}
               data-text={object.text}

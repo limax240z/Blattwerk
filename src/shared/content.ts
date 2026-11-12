@@ -6,7 +6,8 @@ import type { TextFont } from './fonts';
 import type { OcrWord } from './ocr';
 import { normalizeRuns, runsText, type TextRun } from './rich-text';
 
-export type PageObjectKind = 'text' | 'image' | 'form';
+// path: Linien und Flächen (Tabellenrahmen, Hinterlegungen, Unterstreichungen)
+export type PageObjectKind = 'text' | 'image' | 'form' | 'path';
 
 // Ein Seitenobjekt, wie PDFium es kennt. index ist die Position in der Objektliste der Seite (gilt nur für genau
 // diesen Dokumentstand).
@@ -104,6 +105,11 @@ export interface ParagraphStyle {
 
 // Höchstens so viele Objekte je Seite werden zum Bearbeiten angeboten
 export const MAX_PAGE_OBJECTS = 3000;
+// davon höchstens so viele Linien und Flächen
+export const MAX_PAGE_PATHS = 600;
+// Flächen, die mehr als diesen Anteil der Seite bedecken, gelten als Hintergrund und werden nicht angeboten (sonst fängt
+// ein Klick neben dem Text den Hintergrund und verschiebt ihn)
+export const BACKGROUND_SHARE = 0.6;
 
 export const LINE_HEIGHT = 1.2;
 // Abstand der Grundlinie von der Oberkante ihrer Zeile, als Anteil der Schriftgröße: halber Durchschuss 0,1 plus
@@ -164,10 +170,16 @@ const sameFont = (a: PageObjectInfo, b: PageObjectInfo, fonts: Fonts) =>
   a.font === b.font || (a.font !== undefined && b.font !== undefined && Boolean(fonts?.[a.font]?.name) && fonts?.[a.font]?.name === fonts?.[b.font]?.name);
 
 function sameLine(a: PageObjectInfo, b: PageObjectInfo, fonts: Fonts): boolean {
-  if (a.kind !== 'text' || b.kind !== 'text' || !sameFont(a, b, fonts) || !sameRgb(a.color, b.color)) return false;
+  if (a.kind !== 'text' || b.kind !== 'text') return false;
   const size = sizeOf(a);
-  if (size <= 0 || Math.abs(size - sizeOf(b)) > size * 0.05) return false;
+  // Ein Leerzeichen zwischen zwei Schriften (fett, normal) gehört trotzdem zur Zeile
+  const space = a.text === ' ' || b.text === ' ';
+  if (!space && (!sameFont(a, b, fonts) || !sameRgb(a.color, b.color))) return false;
+  if (size <= 0 || (!space && Math.abs(size - sizeOf(b)) > size * 0.05)) return false;
   // Höhe: Grundlinien nahe beieinander (die Unterkante schwankt mit Unterlängen, deshalb Mitte und Überlappung)
+  // Aufrechte Stücke: gleiche Grundlinie (Satzzeichen wie das Komma liegen unten und überlappen kaum mit Buchstaben;
+  // Leerzeichen haben gar keine Höhe)
+  if (a.upright && b.upright && a.baseline !== undefined && b.baseline !== undefined && Math.abs(a.baseline - b.baseline) < size * 0.1) return true;
   const [, ab, , at] = a.bounds;
   const [, bb, , bt] = b.bounds;
   const overlap = Math.min(at, bt) - Math.max(ab, bb);
@@ -192,13 +204,21 @@ export function lineOf(objects: PageObjectInfo[], index: number, fonts?: Record<
   return candidates.slice(first, last + 1);
 }
 
+// Lücke (Anteil der Schriftgröße), ab der zwischen zwei Stücken ein Leerzeichen steht. Setzt das PDF Leerzeichen als
+// eigene Stücke (Browser drucken jedes Zeichen einzeln), sind kleinere Lücken nur Abstände zwischen Buchstaben.
+function gapFactor(pieces: PageObjectInfo[]): number {
+  return pieces.some((piece) => piece.text === ' ') ? 0.35 : 0.12;
+}
+
 // Text der Zeile; zwischen Stücken mit sichtbarer Lücke steht ein Leerzeichen (PDFium hängt es oft schon selbst an)
 export function lineText(pieces: PageObjectInfo[]): string {
+  const gap = gapFactor(pieces);
   let text = '';
   pieces.forEach((piece, i) => {
     const previous = pieces[i - 1];
-    const own = piece.text ?? '';
-    if (previous && !/\s$/.test(text) && !/^\s/.test(own) && piece.bounds[0] - previous.bounds[2] > sizeOf(piece) * 0.12) text += ' ';
+    // PDFium hängt beim Auslesen oft selbst ein Leerzeichen an ein Stück; beginnt das nächste mit einem, entfällt es
+    const own = /\s$/.test(text) ? (piece.text ?? '').replace(/^\s+/, '') : (piece.text ?? '');
+    if (previous && !/\s$/.test(text) && !/^\s/.test(own) && piece.bounds[0] - previous.bounds[2] > sizeOf(piece) * gap) text += ' ';
     text += own;
   });
   return text.trimEnd();
@@ -215,6 +235,7 @@ function styleOfPiece(piece: PageObjectInfo, fonts: Fonts) {
 
 // Stücke einer Zeile mit ihrer Gestaltung, Lücken wie in lineText
 function lineRuns(pieces: PageObjectInfo[], fonts: Fonts): TextRun[] {
+  const gap = gapFactor(pieces);
   const runs: TextRun[] = [];
   let text = '';
   pieces.forEach((piece, i) => {
@@ -227,7 +248,7 @@ function lineRuns(pieces: PageObjectInfo[], fonts: Fonts): TextRun[] {
       last.text = last.text.slice(0, -1);
       text = text.slice(0, -1);
     }
-    if (previous && last && !/\s$/.test(text) && !/^\s/.test(own) && piece.bounds[0] - previous.bounds[2] > sizeOf(piece) * 0.12) {
+    if (previous && last && !/\s$/.test(text) && !/^\s/.test(own) && piece.bounds[0] - previous.bounds[2] > sizeOf(piece) * gap) {
       last.text += ' ';
       text += ' ';
     }
@@ -252,7 +273,9 @@ export type EditUnit = PageObjectInfo & { members: number[]; lines?: number[][];
 export function editUnits(objects: PageObjectInfo[], fonts?: Record<string, PageFontInfo>): EditUnit[] {
   const assigned = new Set<number>();
   const units: EditUnit[] = markedUnits(objects, assigned, fonts);
-  for (const object of objects) {
+  // Leerzeichen zuletzt: Sie schließen sich einer Zeile an, sollen aber keine Zeile aus Stücken verschiedener Schriften bilden
+  const ordered = [...objects.filter((object) => object.text !== ' '), ...objects.filter((object) => object.text === ' ')];
+  for (const object of ordered) {
     if (assigned.has(object.index)) continue;
     if (object.kind !== 'text') {
       units.push({ ...object, members: [object.index] });

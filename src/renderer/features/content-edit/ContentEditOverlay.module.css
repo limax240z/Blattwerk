@@ -40,7 +40,8 @@
 }
 
 .svg .image,
-.svg .form {
+.svg .form,
+.svg .path {
   stroke-dasharray: none;
 }
 

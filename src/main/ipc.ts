@@ -88,6 +88,7 @@ export interface IpcContext {
   getSettings: () => AppSettings;
   setAuthorName: (name: string) => Promise<AppSettings>;
   setReadModeFullscreen: (on: boolean) => AppSettings;
+  setCloseGaps: (on: boolean) => AppSettings;
   onCloseConfirmed: (win: BrowserWindow) => void;
   onCloseCancelled: (win: BrowserWindow) => void;
   // Fenster ohne Tabs schließen (sein letzter Tab ist in ein anderes Fenster gewandert)
@@ -644,6 +645,7 @@ export function registerIpc(ctx: IpcContext): void {
   });
 
   handle(IPC.settingsSetReadModeFullscreen, (_event, on: unknown) => (typeof on === 'boolean' ? ctx.setReadModeFullscreen(on) : ctx.getSettings()));
+  handle(IPC.settingsSetCloseGaps, (_event, on: unknown) => (typeof on === 'boolean' ? ctx.setCloseGaps(on) : ctx.getSettings()));
 
   handle(IPC.openExternal, (event, url: unknown) => {
     if (typeof url !== 'string') return false;
