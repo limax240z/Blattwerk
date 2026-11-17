@@ -230,7 +230,7 @@ function autoUpdateCheck(trigger: UpdateTrigger): void {
 }
 
 function scheduleAutoUpdateCheck(): void {
-  setTimeout(() => autoUpdateCheck('start'), 5000);
+  setTimeout(() => autoUpdateCheck('start'), 2000);
   setInterval(() => autoUpdateCheck('timer'), TICK_MS).unref();
   // Ein Wechsel zwischen eigenen Fenstern ist ein Verlassen und Wiederkommen im selben Augenblick und zählt nicht
   app.on('browser-window-blur', () => {

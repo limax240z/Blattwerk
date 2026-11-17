@@ -45,11 +45,26 @@ export async function fetchChecked(url: string, init: RequestInit, fetchImpl: Fe
 
 const headers = (): Record<string, string> => ({ 'User-Agent': `${PRODUCT_NAME}/${app.getVersion()}`, Accept: 'application/vnd.github+json' });
 
-export async function latestRelease(fetchImpl: FetchLike = fetch): Promise<Release | null> {
-  const response = await fetchChecked(LATEST_URL, { headers: headers(), signal: AbortSignal.timeout(20_000) }, fetchImpl);
+// Letzte Antwort mit ihrem ETag: Die App fragt alle paar Minuten. Bedingte Anfragen (If-None-Match) beantwortet GitHub
+// ohne Änderung mit 304 und ohne Inhalt. Ohne Anmeldung zählen auch sie gegen die Grenze von 60 Anfragen je Stunde
+// (gemessen 2026-11-17); den Abstand regelt deshalb schedule.ts.
+let cached: { etag: string; release: Release | null } | null = null;
+
+export async function latestRelease(fetchImpl: FetchLike = fetch, baseHeaders: Record<string, string> = headers()): Promise<Release | null> {
+  const conditional = cached ? { 'If-None-Match': cached.etag } : {};
+  const response = await fetchChecked(LATEST_URL, { headers: { ...baseHeaders, ...conditional }, signal: AbortSignal.timeout(20_000) }, fetchImpl);
+  if (response.status === 304 && cached) return cached.release;
   if (response.status === 404) return null;
   if (!response.ok) throw new Error(`GitHub antwortet mit ${response.status}`);
-  return parseRelease(await response.json());
+  const release = parseRelease(await response.json());
+  const etag = response.headers.get('etag');
+  cached = etag ? { etag, release } : null;
+  return release;
+}
+
+// Nur für Tests: gemerkte Antwort vergessen
+export function forgetLatestRelease(): void {
+  cached = null;
 }
 
 // Lädt eine Datei in kleinen Stücken auf die Platte und meldet den Fortschritt
