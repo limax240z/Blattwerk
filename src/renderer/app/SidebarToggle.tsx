@@ -1,25 +1,26 @@
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, PanelLeftOpen } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { executeCommand } from '../engine/session';
 import { useUi } from '../state/ui-store';
 import styles from './Sidebars.module.css';
 
-// Lasche am linken Rand des Dokuments: blendet die Seitenleiste ein und aus und bleibt dafür immer an derselben Stelle
+// Am linken Rand des Dokuments: bei offener Seitenleiste eine schmale Lasche zum Einklappen, bei eingeklappter ein gut
+// sichtbarer Knopf zum Ausklappen (die Lasche allein war auf dem dunklen Hintergrund kaum zu finden)
 export function SidebarToggle() {
   const { t } = useTranslation();
   const visible = useUi((s) => s.sidebarVisible);
-  const Icon = visible ? ChevronLeft : ChevronRight;
+  const Icon = visible ? ChevronLeft : PanelLeftOpen;
   return (
     <button
       type="button"
-      className={styles.edgeToggle}
+      className={visible ? styles.edgeToggle : styles.openSidebar}
       aria-label={t('toolbar.sidebar')}
       aria-pressed={visible}
       data-tooltip={t('toolbar.sidebar')}
       onClick={() => executeCommand('view.toggleSidebar')}
       data-testid="sidebar-toggle"
     >
-      <Icon size={14} strokeWidth={2} aria-hidden="true" />
+      <Icon size={visible ? 14 : 18} strokeWidth={visible ? 2 : 1.75} aria-hidden="true" />
     </button>
   );
 }

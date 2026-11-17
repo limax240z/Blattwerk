@@ -166,7 +166,7 @@ export const useUi = create<UiState>((set) => ({
   searchFocusRequest: 0,
   searchFocusHandled: 0,
   authorName: '',
-  readModeFullscreen: true,
+  readModeFullscreen: false,
   closeGaps: true,
   commentToolsVisible: false,
   markToolsVisible: false,
