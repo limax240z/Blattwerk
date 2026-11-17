@@ -72,3 +72,7 @@ in der CI erst nach Freigabe, `.gitignore` schließt Schlüssel und `.env`-Datei
 - Die erste Version mit dieser Suche (0.12.0) muss einmal von Hand installiert werden.
 - Ohne Apple-Developer-Zertifikat sind die Apps nur ad hoc signiert. Die Prüfung schützt vor kaputten Dateien, nicht
   vor einer gefälschten App im Download-Projekt; geschützt ist das über den Schlüssel, mit dem nur CI dort schreibt.
+
+## Nachtrag 2026-11-17: alle fünf Minuten
+
+Der Auftraggeber wollte, dass neue Versionen deutlich schneller ankommen. Die App sucht jetzt beim Start (nach 2 s), bei jedem neuen Dokument, nach mindestens 2 Minuten Abwesenheit und sonst alle 5 Minuten, mit mindestens 1 Minute Abstand. GitHub erlaubt ohne Anmeldung 60 Anfragen je Stunde und Internetanschluss; gemessen zählen auch bedingte Anfragen mit 304 mit. Mit höchstens 12 Anfragen je Stunde bleibt genug Luft, auch für mehrere Rechner im selben Netz. Die Anfrage ist bedingt (`If-None-Match` mit dem ETag der letzten Antwort), dadurch überträgt GitHub ohne neue Version keinen Inhalt.

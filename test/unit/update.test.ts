@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { INSTALL_SCRIPT } from '../../src/main/update/install-script';
-import { fetchChecked } from '../../src/main/update/online';
+import { fetchChecked, forgetLatestRelease, latestRelease } from '../../src/main/update/online';
 import { MIN_GAP_MS, PERIOD_MS, RETURN_AWAY_MS, shouldCheck } from '../../src/main/update/schedule';
 import { compareVersions, isAllowedUpdateUrl, parseRelease, plistString, updateAssetName } from '../../src/shared/update';
 
@@ -113,6 +113,26 @@ describe('Updates aus dem Netz (ADR 0027)', () => {
   });
 });
 
+describe('Neueste Version erfragen', () => {
+  it('fragt bedingt nach und nimmt bei „unverändert“ die gemerkte Antwort', async () => {
+    forgetLatestRelease();
+    const sent: (string | null)[] = [];
+    let answer: Response = new Response(JSON.stringify({ tag_name: 'v1.2.0', assets: [{ name: 'a.zip', browser_download_url: 'https://github.com/a', size: 1 }] }), {
+      status: 200,
+      headers: { etag: '"abc"' },
+    });
+    const fake = async (_url: string, init: RequestInit) => {
+      sent.push(new Headers(init.headers).get('if-none-match'));
+      return answer;
+    };
+    expect((await latestRelease(fake, { 'User-Agent': 'Test' }))?.version).toBe('1.2.0');
+    answer = new Response(null, { status: 304 });
+    expect((await latestRelease(fake, { 'User-Agent': 'Test' }))?.version).toBe('1.2.0');
+    expect(sent).toEqual([null, '"abc"']);
+    forgetLatestRelease();
+  });
+});
+
 describe('Wann nach Updates gesucht wird', () => {
   const now = 1_000_000_000;
 
@@ -137,7 +157,8 @@ describe('Wann nach Updates gesucht wird', () => {
     expect(shouldCheck('return', { now, last: now - 1000, awaySince: now - RETURN_AWAY_MS })).toBe(false);
   });
 
-  it('alle paar Stunden, auch wenn der Rechner dazwischen geschlafen hat', () => {
+  it('alle fünf Minuten, auch wenn der Rechner dazwischen geschlafen hat', () => {
+    expect(PERIOD_MS).toBeLessThanOrEqual(5 * 60_000);
     expect(shouldCheck('timer', { now, last: now - PERIOD_MS + 1 })).toBe(false);
     expect(shouldCheck('timer', { now, last: now - PERIOD_MS })).toBe(true);
     expect(shouldCheck('timer', { now, last: now - 20 * PERIOD_MS })).toBe(true);
