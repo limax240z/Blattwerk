@@ -131,7 +131,35 @@
   background: var(--fill-selected);
 }
 
+/* Eingeklappt: deutlicher Knopf mit Abstand zum Fensterrand (dort liegt unter macOS der Griff zum Größe ändern) */
+.openSidebar {
+  position: absolute;
+  top: 50%;
+  left: 10px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  color: var(--color-text);
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-edge), var(--glass-outline), var(--glass-shadow);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.openSidebar:hover {
+  color: var(--color-brand);
+}
+
 /* Kompaktansicht: Die Leiste liegt über dem Dokument, der Knopf in der Werkzeugleiste genügt */
+:global([data-compact]) .openSidebar,
 :global([data-compact]) .edgeToggle {
   display: none;
 }

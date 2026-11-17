@@ -19,7 +19,7 @@ export interface SettingsData {
   updateFolder: string | null;
   // Letzte Suche nach einer neuen Version im Netz (ms seit 1970), ADR 0027
   lastUpdateCheck?: number;
-  // false = Lesemodus ohne Vollbild; fehlt = mit Vollbild
+  // true = Lesemodus im Vollbild; fehlt oder false = nur das Fenster (Vorgabe seit 0.32.0)
   readModeFullscreen?: boolean;
   // false = nach dem Löschen nichts nachrücken; fehlt = nachrücken
   closeGaps?: boolean;

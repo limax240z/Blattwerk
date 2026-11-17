@@ -614,7 +614,7 @@
     "authorName": "Name für Kommentare",
     "authorHint": "Dieser Name steht als Verfasser bei neuen Kommentaren und Antworten.",
     "readModeFullscreen": "Lesemodus im Vollbild öffnen",
-    "readModeHint": "Aus: Der Lesemodus blendet nur die Leisten aus, das Fenster behält seine Größe.",
+    "readModeHint": "Aus: Der Lesemodus blendet die Leisten aus und zeigt das Dokument groß im Fenster. An: zusätzlich Vollbild über den ganzen Bildschirm.",
     "closeGaps": "Nach dem Löschen nachrücken",
     "closeGapsHint": "Beim Bearbeiten des Inhalts rückt Text, der unter gelöschtem Text steht, automatisch nach oben.",
     "save": "Übernehmen",

@@ -427,6 +427,10 @@ test.describe('Kommentieren', () => {
     await expect(page.getByTestId('left-sidebar')).toBeVisible();
     await page.getByTestId('sidebar-toggle').click();
     await expect(page.getByTestId('left-sidebar')).toHaveCount(0);
+    // Eingeklappt: ein gut sichtbarer Knopf mit Abstand zum Fensterrand (dort greift macOS zum Größe ändern)
+    const open = await page.getByTestId('sidebar-toggle').boundingBox();
+    expect(open?.x ?? 0).toBeGreaterThanOrEqual(8);
+    expect(open?.width ?? 0).toBeGreaterThanOrEqual(30);
     await page.getByTestId('sidebar-toggle').click();
     await expect(page.getByTestId('left-sidebar')).toBeVisible();
     await handle.close();

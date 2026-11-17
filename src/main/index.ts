@@ -599,7 +599,7 @@ function defaultAuthor(): string {
 }
 
 function currentSettings(): AppSettings {
-  return { authorName: settings.authorName ?? defaultAuthor(), readModeFullscreen: settings.readModeFullscreen !== false, closeGaps: settings.closeGaps !== false };
+  return { authorName: settings.authorName ?? defaultAuthor(), readModeFullscreen: settings.readModeFullscreen === true, closeGaps: settings.closeGaps !== false };
 }
 
 // Neuladen oder Absturz der Oberfläche: Dateien des Fensters freigeben, Menüzustand zurücksetzen
