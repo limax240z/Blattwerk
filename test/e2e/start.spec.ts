@@ -4,7 +4,7 @@ import { copyFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fixture, TEXT_PDF } from '../fixtures/expectations';
-import { expectWindowCount, launchApp, menuClick, removeTempDir, waitForDocument, windowWithTitle } from './app';
+import { expectWindowCount, launchApp, menuClick, mergeAllWindows, removeTempDir, waitForDocument, windowWithTitle } from './app';
 
 const tempDirs: string[] = [];
 test.afterAll(() => {
@@ -66,6 +66,12 @@ test('Home-Knopf zeigt die Startseite über dem Dokument; Esc und „Zurück“ 
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('start-screen')).toHaveCount(0);
 
+  // Ein einfacher Klick auf den (schon aktiven) Tab führt zum Dokument zurück
+  await page.getByTestId('home-button').click();
+  await expect(page.getByTestId('start-screen')).toBeVisible();
+  await page.getByTestId('tab').first().click();
+  await expect(page.getByTestId('start-screen')).toHaveCount(0);
+
   await menuClick(app, 'app.home');
   await expect(page.getByTestId('start-screen')).toBeVisible();
   await page.getByTestId('start-back').click();
@@ -77,6 +83,23 @@ test('Home-Knopf zeigt die Startseite über dem Dokument; Esc und „Zurück“ 
   await expectWindowCount(app, 2);
   await waitForDocument(await windowWithTitle(app, 'Deckblatt.pdf'), 1);
   await expect(page.getByTestId('start-screen')).toHaveCount(0);
+  await close();
+});
+
+test('Startseite über dem Dokument: Klick auf einen anderen Tab zeigt dessen Dokument', async () => {
+  const { app, close } = await launchApp([fixture('text.pdf'), fixture('formular.pdf')]);
+  await expectWindowCount(app, 2);
+  await waitForDocument(await windowWithTitle(app, 'text.pdf'), TEXT_PDF.pages);
+  await waitForDocument(await windowWithTitle(app, 'formular.pdf'), 1);
+  const page = await mergeAllWindows(app);
+  await expect(page.getByTestId('tab')).toHaveCount(2);
+  const tabs = page.getByTestId('tab');
+  await tabs.nth(0).click();
+  await page.getByTestId('home-button').click();
+  await expect(page.getByTestId('start-screen')).toBeVisible();
+  await tabs.nth(1).click();
+  await expect(page.getByTestId('start-screen')).toHaveCount(0);
+  await expect(tabs.nth(1)).toHaveClass(/active/);
   await close();
 });
 
