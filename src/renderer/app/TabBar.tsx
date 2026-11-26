@@ -319,7 +319,13 @@ export function TabBar() {
   const { t } = useTranslation();
   const tabs = useDocuments((s) => s.tabs);
   const activeId = useDocuments((s) => s.activeId);
-  const setActive = useDocuments((s) => s.setActive);
+  const setActiveTab = useDocuments((s) => s.setActive);
+  // Ein Klick auf einen Tab zeigt sein Dokument, auch auf den schon aktiven: Die Startseite als Überlagerung schließt
+  // sich sonst nur bei einem Tabwechsel (App.tsx), und ein Klick auf den aktiven Tab blieb wirkungslos
+  const setActive = (id: string) => {
+    setActiveTab(id);
+    useUi.getState().setHomeOpen(false);
+  };
   const annotationTabs = useAnnotations((s) => s.tabs);
   const historyTabs = useHistory((s) => s.tabs);
   const formTabs = useForms((s) => s.tabs);
